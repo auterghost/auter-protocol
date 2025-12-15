@@ -1,94 +1,419 @@
-let web3;
-let accounts;
-let contractInstance;
-let deployedContractAddress = null; 
+// ==========================================
+// AUTER Protocol - 部署腳本 (OpSec Version)
+// ==========================================
 
-const status = document.getElementById('status');
-const result = document.getElementById('result');
-const addressDisplay = document.getElementById('addressDisplay');
-const deployBtn = document.getElementById('deployBtn');
-const getAddrBtn = document.getElementById('getAddrBtn');
+// 1. 您的合約 ABI (您剛剛辛苦找到的！)
+const contractABI = [
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "_keeper",
+				"type": "address"
+			},
+			{
+				"internalType": "address payable",
+				"name": "_treasury",
+				"type": "address"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "player",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "PrizeClaimed",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "player",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "RefundIssued",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "roundId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "totalPot",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "fee",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "prizePool",
+				"type": "uint256"
+			}
+		],
+		"name": "RoundRevealed",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "address",
+				"name": "player",
+				"type": "address"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "roundId",
+				"type": "uint256"
+			}
+		],
+		"name": "TicketPurchased",
+		"type": "event"
+	},
+	{
+		"inputs": [],
+		"name": "REFUND_DELAY",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "SUNSET_DELAY",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "bytes",
+				"name": "_encryptedChoices",
+				"type": "bytes"
+			}
+		],
+		"name": "buyTicket",
+		"outputs": [],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "claimPrize",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "currentPot",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "currentRoundId",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "emergencyRefund",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "keeper",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "lastActiveTime",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "owner",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "pendingWithdrawals",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address[]",
+				"name": "winners",
+				"type": "address[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "prizes",
+				"type": "uint256[]"
+			}
+		],
+		"name": "revealRound",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"name": "roundDeposits",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address payable",
+				"name": "_newTreasury",
+				"type": "address"
+			}
+		],
+		"name": "setTreasury",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "sunsetWithdraw",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "ticketPrice",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "treasury",
+		"outputs": [
+			{
+				"internalType": "address payable",
+				"name": "",
+				"type": "address"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+];
 
-// 1. 連線錢包
+// 2. 您的合約 Bytecode (記得加上 0x 前綴)
+const contractBytecode = "0x6080604052670de0b6b3a764000060035560016004553480156200002257600080fd5b5060405162001c4138038062001c418339818101604052810190620000489190620001c8565b336000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555081600160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555080600260006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055504260058190555050506200020f565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b60006200014b826200011e565b9050919050565b6200015d816200013e565b81146200016957600080fd5b50565b6000815190506200017d8162000152565b92915050565b600062000190826200011e565b9050919050565b620001a28162000183565b8114620001ae57600080fd5b50565b600081519050620001c28162000197565b92915050565b60008060408385031215620001e257620001e162000119565b5b6000620001f2858286016200016c565b92505060206200020585828601620001b1565b9150509250929050565b611a22806200021f6000396000f3fe6080604052600436106100fe5760003560e01c80639cbe5efd11610095578063d1f7097d11610064578063d1f7097d146102ba578063ea8932d8146102f7578063f0f4426014610322578063f3f437031461034b578063fd7d40c714610388576100fe565b80639cbe5efd1461021f578063aced16611461024a578063c54c283b14610275578063cfc873d31461029e576100fe565b8063574479e6116100d1578063574479e61461018757806361d027b3146101b257806370740ac9146101dd5780638da5cb5b146101f4576100fe565b80631209b1f61461010357806316bfe25c1461012e578063190da595146101455780631f14ef6414610170575b600080fd5b34801561010f57600080fd5b506101186103b3565b6040516101259190610e5d565b60405180910390f35b34801561013a57600080fd5b506101436103b9565b005b34801561015157600080fd5b5061015a610595565b6040516101679190610e5d565b60405180910390f35b34801561017c57600080fd5b5061018561059c565b005b34801561019357600080fd5b5061019c6106e5565b6040516101a99190610e5d565b60405180910390f35b3480156101be57600080fd5b506101c76106eb565b6040516101d49190610eb9565b60405180910390f35b3480156101e957600080fd5b506101f2610711565b005b34801561020057600080fd5b50610209610875565b6040516102169190610ef5565b60405180910390f35b34801561022b57600080fd5b50610234610899565b6040516102419190610e5d565b60405180910390f35b34801561025657600080fd5b5061025f61089f565b60405161026c9190610ef5565b60405180910390f35b34801561028157600080fd5b5061029c60048036038101906102979190611198565b6108c5565b005b6102b860048036038101906102b391906112c5565b610c08565b005b3480156102c657600080fd5b506102e160048036038101906102dc919061130e565b610d28565b6040516102ee9190610e5d565b60405180910390f35b34801561030357600080fd5b5061030c610d4d565b6040516103199190610e5d565b60405180910390f35b34801561032e57600080fd5b506103496004803603810190610344919061137a565b610d53565b005b34801561035757600080fd5b50610372600480360381019061036d91906113a7565b610e25565b60405161037f9190610e5d565b60405180910390f35b34801561039457600080fd5b5061039d610e3d565b6040516103aa9190610e5d565b60405180910390f35b60035481565b62093a806005546103ca9190611403565b421161040b576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161040290611494565b60405180910390fd5b600060066000600454815260200190815260200160002060003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020549050600081116104a5576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161049c90611500565b60405180910390fd5b600060066000600454815260200190815260200160002060003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020819055503373ffffffffffffffffffffffffffffffffffffffff166108fc829081150290604051600060405180830381858888f19350505050158015610543573d6000803e3d6000fd5b503373ffffffffffffffffffffffffffffffffffffffff167fa171b6942063c6f2800ce40a780edce37baa2b618571b11eedd1e69e626e7d768260405161058a9190610e5d565b60405180910390a250565b62093a8081565b60008054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff161461062a576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016106219061156c565b60405180910390fd5b62ed4e0060055461063b9190611403565b421161067c576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610673906115d8565b60405180910390fd5b60008054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff166108fc479081150290604051600060405180830381858888f193505050501580156106e2573d6000803e3d6000fd5b50565b60085481565b600260009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b6000600760003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200190815260200160002054905060008111610798576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161078f90611644565b60405180910390fd5b6000600760003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff168152602001908152602001600020819055503373ffffffffffffffffffffffffffffffffffffffff166108fc829081150290604051600060405180830381858888f19350505050158015610823573d6000803e3d6000fd5b503373ffffffffffffffffffffffffffffffffffffffff167f95681e512bc0fe659e195e06c283eada494316f3d801213e48e7101af92bf7708260405161086a9190610e5d565b60405180910390a250565b60008054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b60045481565b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1681565b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff16148061096c575060008054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff16145b6109ab576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016109a2906116b0565b60405180910390fd5b6000600854116109f0576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004016109e79061171c565b60405180910390fd5b600060646005600854610a03919061173c565b610a0d91906117ad565b9050600081600854610a1f91906117de565b90506000600260009054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1683604051610a6990611843565b60006040518083038185875af1925050503d8060008114610aa6576040519150601f19603f3d011682016040523d82523d6000602084013e610aab565b606091505b5050905080610aef576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610ae6906118a4565b60405180910390fd5b60005b8551811015610b9857848181518110610b0e57610b0d6118c4565b5b602002602001015160076000888481518110610b2d57610b2c6118c4565b5b602002602001015173ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020016000206000828254610b7e9190611403565b925050819055508080610b90906118f3565b915050610af2565b507ffbfcbda5d95590a45ec871721440d0274d77ed9ee3550933f59b2f4353c5bb296004546008548585604051610bd2949392919061193b565b60405180910390a1600060088190555060046000815480929190610bf5906118f3565b9190505550426005819055505050505050565b6003543414610c4c576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610c43906119cc565b60405180910390fd5b3460066000600454815260200190815260200160002060003373ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff1681526020019081526020016000206000828254610cae9190611403565b925050819055503460086000828254610cc79190611403565b92505081905550426005819055503373ffffffffffffffffffffffffffffffffffffffff167f0668f5b446eb814fe35b3206f43f14bd8567ba04ddaf7a3ee56516929ab22ccb600454604051610d1d9190610e5d565b60405180910390a250565b6006602052816000526040600020602052806000526040600020600091509150505481565b60055481565b60008054906101000a900473ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff1614610de1576040517f08c379a0000000000000000000000000000000000000000000000000000000008152600401610dd89061156c565b60405180910390fd5b80600260006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555050565b60076020528060005260406000206000915090505481565b62ed4e0081565b6000819050919050565b610e5781610e44565b82525050565b6000602082019050610e726000830184610e4e565b92915050565b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b6000610ea382610e78565b9050919050565b610eb381610e98565b82525050565b6000602082019050610ece6000830184610eaa565b92915050565b6000610edf82610e78565b9050919050565b610eef81610ed4565b82525050565b6000602082019050610f0a6000830184610ee6565b92915050565b6000604051905090565b600080fd5b600080fd5b600080fd5b6000601f19601f8301169050919050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b610f7282610f29565b810181811067ffffffffffffffff82111715610f9157610f90610f3a565b5b80604052505050565b6000610fa4610f10565b9050610fb08282610f69565b919050565b600067ffffffffffffffff821115610fd057610fcf610f3a565b5b602082029050602081019050919050565b600080fd5b610fef81610ed4565b8114610ffa57600080fd5b50565b60008135905061100c81610fe6565b92915050565b600061102561102084610fb5565b610f9a565b9050808382526020820190506020840283018581111561104857611047610fe1565b5b835b81811015611071578061105d8882610ffd565b84526020840193505060208101905061104a565b5050509392505050565b600082601f8301126110905761108f610f24565b5b81356110a0848260208601611012565b91505092915050565b600067ffffffffffffffff8211156110c4576110c3610f3a565b5b602082029050602081019050919050565b6110de81610e44565b81146110e957600080fd5b50565b6000813590506110fb816110d5565b92915050565b600061111461110f846110a9565b610f9a565b9050808382526020820190506020840283018581111561113757611136610fe1565b5b835b81811015611160578061114c88826110ec565b845260208401935050602081019050611139565b5050509392505050565b600082601f83011261117f5761117e610f24565b5b813561118f848260208601611101565b91505092915050565b600080604083850312156111af576111ae610f1a565b5b600083013567ffffffffffffffff8111156111cd576111cc610f1f565b5b6111d98582860161107b565b925050602083013567ffffffffffffffff8111156111fa576111f9610f1f565b5b6112068582860161116a565b9150509250929050565b600080fd5b600067ffffffffffffffff8211156112305761122f610f3a565b5b61123982610f29565b9050602081019050919050565b82818337600083830152505050565b600061126861126384611215565b610f9a565b90508281526020810184848401111561128457611283611210565b5b61128f848285611246565b509392505050565b600082601f8301126112ac576112ab610f24565b5b81356112bc848260208601611255565b91505092915050565b6000602082840312156112db576112da610f1a565b5b600082013567ffffffffffffffff8111156112f9576112f8610f1f565b5b61130584828501611297565b91505092915050565b6000806040838503121561132557611324610f1a565b5b6000611333858286016110ec565b925050602061134485828601610ffd565b9150509250929050565b61135781610e98565b811461136257600080fd5b50565b6000813590506113748161134e565b92915050565b6000602082840312156113905761138f610f1a565b5b600061139e84828501611365565b91505092915050565b6000602082840312156113bd576113bc610f1a565b5b60006113cb84828501610ffd565b91505092915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b600061140e82610e44565b915061141983610e44565b9250828201905080821115611431576114306113d4565b5b92915050565b600082825260208201905092915050565b7f47616d65206973207374696c6c20616374697665000000000000000000000000600082015250565b600061147e601483611437565b915061148982611448565b602082019050919050565b600060208201905081810360008301526114ad81611471565b9050919050565b7f4e6f206465706f73697420666f756e6400000000000000000000000000000000600082015250565b60006114ea601083611437565b91506114f5826114b4565b602082019050919050565b60006020820190508181036000830152611519816114dd565b9050919050565b7f4e6f74204f776e65720000000000000000000000000000000000000000000000600082015250565b6000611556600983611437565b915061156182611520565b602082019050919050565b6000602082019050818103600083015261158581611549565b9050919050565b7f47616d65206973206e6f74206465616420796574000000000000000000000000600082015250565b60006115c2601483611437565b91506115cd8261158c565b602082019050919050565b600060208201905081810360008301526115f1816115b5565b9050919050565b7f4e6f207072697a6520746f20636c61696d000000000000000000000000000000600082015250565b600061162e601183611437565b9150611639826115f8565b602082019050919050565b6000602082019050818103600083015261165d81611621565b9050919050565b7f4e6f74204b656570657200000000000000000000000000000000000000000000600082015250565b600061169a600a83611437565b91506116a582611664565b602082019050919050565b600060208201905081810360008301526116c98161168d565b9050919050565b7f506f7420697320656d7074790000000000000000000000000000000000000000600082015250565b6000611706600c83611437565b9150611711826116d0565b602082019050919050565b60006020820190508181036000830152611735816116f9565b9050919050565b600061174782610e44565b915061175283610e44565b925082820261176081610e44565b91508282048414831517611777576117766113d4565b5b5092915050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052601260045260246000fd5b60006117b882610e44565b91506117c383610e44565b9250826117d3576117d261177e565b5b828204905092915050565b60006117e982610e44565b91506117f483610e44565b925082820390508181111561180c5761180b6113d4565b5b92915050565b600081905092915050565b50565b600061182d600083611812565b91506118388261181d565b600082019050919050565b600061184e82611820565b9150819050919050565b7f466565207472616e73666572206661696c656400000000000000000000000000600082015250565b600061188e601383611437565b915061189982611858565b602082019050919050565b600060208201905081810360008301526118bd81611881565b9050919050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052603260045260246000fd5b60006118fe82610e44565b91507fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff82036119305761192f6113d4565b5b600182019050919050565b60006080820190506119506000830187610e4e565b61195d6020830186610e4e565b61196a6040830185610e4e565b6119776060830184610e4e565b95945050505050565b7f57726f6e67207072696365000000000000000000000000000000000000000000600082015250565b60006119b6600b83611437565b91506119c182611980565b602082019050919050565b600060208201905081810360008301526119e5816119a9565b905091905056fea2646970667358221220fb23bc48e6ac56cec96074cdd569f46fa279cee58534720ad75f44bf2f1b8f1064736f6c63430008130033";
+
+let provider;
+let signer;
+let contract;
+
+// 3. 連線錢包
 async function connectWallet() {
-    if (typeof window.ethereum !== 'undefined') {
+    if (window.ethereum) {
         try {
-            // 請求連線 MetaMask
-            accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-            web3 = new Web3(window.ethereum);
-            status.textContent = `已連線到區塊鏈 (帳號: ${accounts[0].substring(0, 6)}...)`;
-
-            deployBtn.disabled = false; 
-            result.innerHTML = '<p style="color:green;">連線成功，現在可以部署合約。</p>';
-
+            provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+            const address = await signer.getAddress();
+            
+            // 更新 UI
+            document.getElementById("status").innerText = "狀態: 已連線到 " + address;
+            document.getElementById("status").style.color = "green";
+            console.log("Connected to:", address);
         } catch (error) {
-            console.error("連線錯誤:", error);
-            status.textContent = '連線錢包時發生錯誤。';
-            result.innerHTML = '<p style="color:red;">請確認您已安裝 MetaMask 並授權連線。</p>';
+            console.error(error);
+            alert("連線失敗: " + error.message);
         }
     } else {
-        status.textContent = '錯誤：請安裝 MetaMask 或其他 Web3 錢包。';
-        result.innerHTML = '<p style="color:red;">請安裝 <a href="https://metamask.io/" target="_blank">MetaMask</a> 以繼續。</p>';
+        alert("請安裝 MetaMask!");
     }
 }
 
-// 2. 部署智能合約 (佔位邏輯，需要您的 ABI 和 Bytecode)
+// 4. 部署合約 (核心功能)
 async function deployContract() {
-    if (!accounts) {
-        result.innerHTML = '<p style="color:red;">請先連線錢包。</p>';
+    if (!signer) {
+        alert("請先連線錢包！");
         return;
     }
 
-    result.innerHTML = '<p style="color:orange;">警告：我們需要您的智能合約 **ABI** 和 **Bytecode** 才能真正部署。</p>';
-    status.textContent = '合約部署功能準備中...';
-    deployBtn.disabled = true; // 避免重複點擊
+    try {
+        document.getElementById("status").innerText = "狀態: 正在部署合約...請在 MetaMask 確認";
+        
+        // 建立合約工廠
+        const factory = new ethers.ContractFactory(contractABI, contractBytecode, signer);
 
-    // **************** [這裡將是您的核心智能合約程式碼] ****************
-    // 由於您尚未提供最終編譯結果 (ABI & Bytecode)，此處先佔位
-    const contractABI = []; // 您的 ABI 
-    const contractBytecode = '0x'; // 您的 Bytecode
+        // *** 這裡設定 Keeper 和 Treasury ***
+        // 為了部署順利，我們先把這兩個角色都設為您自己 (Deployer)
+        // 這樣您一個錢包就能測試所有功能
+        const keeperAddress = signer.address;
+        const treasuryAddress = signer.address;
 
-    if (contractABI.length === 0) {
-        result.innerHTML += '<p style="color:red;">**錯誤：缺少 ABI 和 Bytecode**，無法部署。</p>';
-        deployBtn.disabled = false;
-        return;
-    }
-    // *******************************************************************
+        console.log("Deploying with Keeper:", keeperAddress);
+        console.log("Deploying with Treasury:", treasuryAddress);
 
-    // 模擬部署過程 (實際部署代碼需要 ABI 和 Bytecode)
-    // const contract = new web3.eth.Contract(contractABI);
-    // contract.deploy({ data: contractBytecode, arguments: [/* 構造函數參數 */] })
-    //     .send({ from: accounts[0] })
-    //     .on('transactionHash', (hash) => {
-    //         result.innerHTML = `<p style="color:orange;">交易已發送，Hash: ${hash}</p>`;
-    //     })
-    //     .on('receipt', (receipt) => {
-    //         deployedContractAddress = receipt.contractAddress;
-    //         result.innerHTML = `<p style="color:green;">合約部署成功！地址已儲存。</p>`;
-    //         addressDisplay.textContent = `部署地址: ${deployedContractAddress}`;
-    //         getAddrBtn.disabled = false;
-    //     })
-    //     .on('error', (error) => {
-    //         result.innerHTML = `<p style="color:red;">部署失敗: ${error.message}</p>`;
-    //         deployBtn.disabled = false;
-    //     });
-}
+        // 發送部署交易
+        const contract = await factory.deploy(keeperAddress, treasuryAddress);
+        
+        document.getElementById("status").innerText = "狀態: 交易已發送，等待區塊確認...";
+        
+        // 等待合約部署完成
+        await contract.waitForDeployment();
+        
+        const contractAddress = await contract.getAddress();
+        document.getElementById("status").innerText = "狀態: 部署成功！合約地址: " + contractAddress;
+        document.getElementById("status").style.color = "blue";
+        
+        console.log("Contract Deployed at:", contractAddress);
+        alert("部署成功！合約地址: " + contractAddress);
 
-// 3. 顯示合約地址
-function getContractAddress() {
-    if (deployedContractAddress) {
-        addressDisplay.textContent = `已部署的合約地址: ${deployedContractAddress}`;
-        result.innerHTML = '<p style="color:blue;">合約地址已成功顯示。</p>';
-    } else {
-        result.innerHTML = '<p style="color:red;">請先成功部署合約。</p>';
+    } catch (error) {
+        console.error("Deployment Error:", error);
+        document.getElementById("status").innerText = "狀態: 部署失敗 (" + error.message + ")";
+        document.getElementById("status").style.color = "red";
     }
 }
 
-// 初始化狀態
-window.onload = () => {
-    if (typeof window.ethereum !== 'undefined') {
-        status.textContent = 'MetaMask 偵測成功，請點擊連線。';
-    } else {
-        status.textContent = '請安裝 MetaMask 錢包。';
-    }
-};
+// 5. 綁定按鈕事件
+document.addEventListener("DOMContentLoaded", function() {
+    const connectBtn = document.querySelector("button:nth-of-type(1)"); 
+    // 假設第一個按鈕是連線
+    if(connectBtn) connectBtn.addEventListener("click", connectWallet);
+
+    const deployBtn = document.querySelector("button:nth-of-type(2)");
+    // 假設第二個按鈕是部署
+    if(deployBtn) deployBtn.addEventListener("click", deployContract);
+});
