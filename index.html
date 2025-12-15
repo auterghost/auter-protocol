@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AUTER Protocol DApp</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 50px; background-color: #f4f4f9; }
+.container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+h1 { color: #333; }
+button { padding: 10px 20px; margin: 10px 0; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+button:hover { background-color: #0056b3; }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <h1>AUTER Protocol 部署工具</h1>
+    <p>狀態: <span id="status">未連線到區塊鏈</span></p>
+
+    <div id="result"></div>
+
+    <h2>步驟一：部署智能合約</h2>
+    <button onclick="deployContract()">啟動合約部署</button>
+
+    <h2>步驟二：顯示合約地址</h2>
+    <button onclick="getContractAddress()">取得合約地址</button>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
