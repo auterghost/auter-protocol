@@ -1,37 +1,35 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-TW">
 <head>
-<title>AUTER Protocol DApp</title>
-<style>
-body { font-family: Arial, sans-serif; margin: 50px; background-color: #f4f4f9; }
-.container { max-width: 600px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-h1 { color: #333; }
-button { padding: 10px 20px; margin: 10px 0; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-button:hover { background-color: #0056b3; }
-</style>
-<script src="https://cdn.jsdelivr.net/npm/web3@1.6.0/dist/web3.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AUTER Protocol 部署工具</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+        .box { border: 1px solid #ddd; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        button { padding: 10px 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; margin-top: 10px; }
+        button:hover { background-color: #0056b3; }
+        #status { margin-top: 15px; font-weight: bold; color: #333; }
+    </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>AUTER Protocol 部署工具</h1>
-    <p>狀態: <span id="status">未連線到錢包</span></p>
+    <div class="box">
+        <h1>AUTER Protocol 部署工具</h1>
+        
+        <p id="status">狀態: 等待操作...</p>
 
-    <div id="result"></div>
-    <div id="addressDisplay" style="margin-top: 15px; font-weight: bold; color: #1e40af;"></div>
+        <h3>步驟一：連線 MetaMask</h3>
+        <button onclick="connectWallet()">連線區塊鏈錢包</button>
 
-    <h2>步驟一：連線 MetaMask</h2>
-    <button onclick="connectWallet()">連線區塊鏈錢包</button>
+        <h3>步驟二：部署智能合約</h3>
+        <button onclick="deployContract()">啟動合約部署</button>
+    </div>
 
-    <h2>步驟二：部署智能合約</h2>
-    <button id="deployBtn" onclick="deployContract()" disabled>啟動合約部署</button>
-
-    <h2>步驟三：操作合約</h2>
-    <button id="getAddrBtn" onclick="getContractAddress()" disabled>取得部署地址</button>
-
-</div>
-
-<script src="script.js"></script>
+    <script src="script.js"></script>
 
 </body>
 </html>
