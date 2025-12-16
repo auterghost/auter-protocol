@@ -3,33 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AUTER Protocol 部署工具</title>
-    
+    <title>AUTER 測試控制台</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
-        .box { border: 1px solid #ddd; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        button { padding: 10px 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; margin-top: 10px; }
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f4; }
+        .box { background: white; border: 1px solid #ddd; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        button { padding: 10px 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; margin-top: 10px; width: 100%; }
         button:hover { background-color: #0056b3; }
-        #status { margin-top: 15px; font-weight: bold; color: #333; }
+        button.buy { background-color: #28a745; }
+        button.buy:hover { background-color: #218838; }
+        #status, #priceInfo { margin-top: 15px; font-weight: bold; color: #333; white-space: pre-wrap; }
     </style>
 </head>
 <body>
 
     <div class="box">
-        <h1>AUTER Protocol 部署工具</h1>
-        
-        <p id="status">狀態: 等待操作...</p>
+        <h2>🛠️ 1. 錢包連線</h2>
+        <button onclick="connectWallet()">連線 MetaMask</button>
+        <p id="status">🔴 尚未連線</p>
+    </div>
 
-        <h3>步驟一：連線 MetaMask</h3>
-        <button onclick="connectWallet()">連線區塊鏈錢包</button>
-
-        <h3>步驟二：部署智能合約</h3>
-        <button onclick="deployContract()">啟動合約部署</button>
+    <div class="box">
+        <h2>🎫 2. 購買測試票券</h2>
+        <p>這會模擬一個玩家進場，購買一張票。</p>
+        <div id="priceInfo">正在讀取票價...</div>
+        <button class="buy" onclick="buyTicket()">💰 購買一張票 (Buy Ticket)</button>
     </div>
 
     <script src="script.js"></script>
-
 </body>
 </html>
