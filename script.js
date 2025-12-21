@@ -1,5 +1,5 @@
-// 您的合約地址 (這是我們剛剛部署最新的那一個)
-const CONTRACT_ADDRESS = "0x303bb114056284c33a808ac0A71399ed00FBe099";
+// 修正版：合約地址已改為全小寫，解決 Checksum 錯誤
+const CONTRACT_ADDRESS = "0x303bb114056284c33a808ac0a71399ed00fbe099";
 
 const abi = [
     "function ticketPrice() view returns (uint256)",
@@ -45,14 +45,12 @@ async function buyTicket() {
 
     try {
         // 模擬玩家的選擇 (A1, B2, C3, D4, E5, F6)
-        // 這裡我們隨便轉成一個 bytes，實際上要用特定的編碼
-        // 為了測試，我們先傳送一個假的 "選擇數據"
+        // 目前測試階段這是固定的，未來我們會加上讓玩家自己選號的功能
         const mockChoice = ethers.toUtf8Bytes("A1,B2,C3,D4,E5,F6");
 
         document.getElementById("status").innerText = "⏳ 正在發送交易...請在錢包確認";
         
-        // 🚀【關鍵修改】強制設定 gasLimit 為 500,000
-        // 這能解決 Internal JSON-RPC error 錯誤，略過節點估算
+        // 🚀 強制設定 gasLimit 為 500,000 (避免估算錯誤)
         const tx = await contract.buyTicket(mockChoice, { 
             value: price, 
             gasLimit: 500000 
@@ -61,8 +59,8 @@ async function buyTicket() {
         document.getElementById("status").innerText = "⏳ 交易發送中...等待區塊確認";
         await tx.wait();
         
-        document.getElementById("status").innerText = "✅ 購票成功！現在去跑 Keeper 看看！";
-        alert("購票成功！合約裡現在有錢了！");
+        document.getElementById("status").innerText = "✅ 購票成功！資金已進入合約金庫！";
+        alert("購票成功！你是全球大樂透 V5 主網的第一位玩家！");
 
     } catch (error) {
         console.error(error);
