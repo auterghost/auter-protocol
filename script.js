@@ -1,4 +1,4 @@
-// 您的合約地址 
+// 您的合約地址 (這是我們剛剛部署最新的那一個)
 const CONTRACT_ADDRESS = "0xc834675044108fD896e9E79dd6B5EAa0d6ebB2B9";
 
 const abi = [
@@ -14,6 +14,7 @@ let price = 0;
 async function connectWallet() {
     if (window.ethereum) {
         try {
+            // Ethers.js v6 的寫法
             provider = new ethers.BrowserProvider(window.ethereum);
             signer = await provider.getSigner();
             const address = await signer.getAddress();
@@ -50,8 +51,12 @@ async function buyTicket() {
 
         document.getElementById("status").innerText = "⏳ 正在發送交易...請在錢包確認";
         
-        // 發送交易：帶上票價 (value)
-        const tx = await contract.buyTicket(mockChoice, { value: price });
+        // 🚀【關鍵修改】強制設定 gasLimit 為 500,000
+        // 這能解決 Internal JSON-RPC error 錯誤，略過節點估算
+        const tx = await contract.buyTicket(mockChoice, { 
+            value: price, 
+            gasLimit: 500000 
+        });
         
         document.getElementById("status").innerText = "⏳ 交易發送中...等待區塊確認";
         await tx.wait();
