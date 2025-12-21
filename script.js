@@ -1,5 +1,5 @@
-// 您的合約地址 (請確認這是最新部署的那個 0xA6... 開頭的)
-const CONTRACT_ADDRESS = "0xA6F645Aba0734A49B2Ed89E39c2c374C7f770667";
+// 您的合約地址 
+const CONTRACT_ADDRESS = "0xc834675044108fD896e9E79dd6B5EAa0d6ebB2B9";
 
 const abi = [
     "function ticketPrice() view returns (uint256)",
