@@ -1,5 +1,5 @@
 // 修正版：合約地址已改為全小寫，解決 Checksum 錯誤
-const CONTRACT_ADDRESS = "0x303bb114056284c33a808ac0a71399ed00fbe099";
+const CONTRACT_ADDRESS = "0x87E8eE81256861e51280b66cBe1cB3A858890780";
 
 const abi = [
     "function ticketPrice() view returns (uint256)",
