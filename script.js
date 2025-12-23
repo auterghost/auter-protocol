@@ -1,4 +1,5 @@
-// ✅ 請填入你剛剛測試成功的 V6.0 合約地址
+// ✅ V6.1 優化版：新增「自動偵測帳號切換」功能
+// 請確認合約地址是正確的 V6.0 地址
 const CONTRACT_ADDRESS = "0xD4991248BdBCE99b04Ef4111cDf1e7f90ed904F7";
 
 const abi = [
@@ -13,7 +14,15 @@ const abi = [
 let provider, signer, contract;
 let price = 0;
 let userAddress = "";
-let selectedNumbers = []; // 儲存玩家選的號碼 (例如 ["A1", "B2"])
+let selectedNumbers = []; 
+
+// 🔥 新增：監聽錢包切換事件
+// 只要你在 MetaMask 切換帳號，網頁就會自動重新整理
+if (window.ethereum) {
+    window.ethereum.on('accountsChanged', function (accounts) {
+        window.location.reload();
+    });
+}
 
 // 初始化：產生 7x7 矩陣按鈕
 window.onload = function() {
@@ -32,14 +41,11 @@ window.onload = function() {
     });
 };
 
-// 處理選號邏輯
 function toggleSelection(btn, coord) {
     if (selectedNumbers.includes(coord)) {
-        // 取消選擇
         selectedNumbers = selectedNumbers.filter(n => n !== coord);
         btn.classList.remove('selected');
     } else {
-        // 選擇 (限制最多 6 個)
         if (selectedNumbers.length >= 6) {
             alert("最多只能選擇 6 個號碼！");
             return;
@@ -54,7 +60,6 @@ function updateSelectionUI() {
     document.getElementById('selectedCount').innerText = selectedNumbers.length;
     document.getElementById('selectedCoords').innerText = selectedNumbers.length > 0 ? selectedNumbers.join(", ") : "(尚未選擇)";
     
-    // 只有連線且選滿 6 個時，才啟用購買按鈕
     const buyBtn = document.getElementById('btnBuy');
     if (contract && selectedNumbers.length === 6) {
         buyBtn.disabled = false;
@@ -70,6 +75,7 @@ async function connectWallet() {
     if (window.ethereum) {
         try {
             provider = new ethers.BrowserProvider(window.ethereum);
+            // 请求用戶授權帳號 (如果切換了帳號，這裡會抓到新的)
             signer = await provider.getSigner();
             userAddress = await signer.getAddress();
             
@@ -80,7 +86,7 @@ async function connectWallet() {
             price = priceWei;
             document.getElementById("priceInfo").innerText = `🎫 當前票價: ${ethers.formatEther(priceWei)} POL`;
             
-            updateSelectionUI(); // 重新檢查按鈕狀態
+            updateSelectionUI(); 
             checkWinnings();
 
         } catch (error) {
@@ -91,13 +97,12 @@ async function connectWallet() {
     }
 }
 
-// 2. 購買票券 (將玩家選的號碼送上鏈)
+// 2. 購買票券
 async function buyTicket() {
     if (selectedNumbers.length !== 6) return alert("請先選擇 6 個號碼！");
     if (!contract) return alert("請先連線錢包！");
     
     try {
-        // 將陣列轉為字串 (例如 "A1,B2,C3,D4,E5,F6") 再轉為 Bytes
         const choiceString = selectedNumbers.join(",");
         const encryptedChoice = ethers.toUtf8Bytes(choiceString);
         
@@ -110,7 +115,6 @@ async function buyTicket() {
         document.getElementById("status").innerText = "✅ 購票成功！祝您中獎！";
         alert(`購票成功！您選擇了: ${choiceString}`);
         
-        // 清空選擇
         selectedNumbers = [];
         document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('selected'));
         updateSelectionUI();
@@ -160,12 +164,11 @@ async function claimPrize() {
     }
 }
 
-// 5. 管理員開獎 (已修正 Gas)
+// 5. 管理員開獎 (Gas Limit 300,000)
 async function drawWinner() {
     if (!contract) return;
     const source = "return Functions.encodeUint256(Math.floor(Math.random() * 100));"; 
     try {
-        // 設定 300,000 以符合 Chainlink 限制
         const tx = await contract.performUpkeep(source, { gasLimit: 300000 });
         document.getElementById("status").innerText = "⏳ 開獎請求已發送...";
         await tx.wait();
