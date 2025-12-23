@@ -1,21 +1,69 @@
-// 修正版 V6.0：已更新合約地址與強制 Gas 設定
-// ✅ V6.0 新合約地址 (你提供的)
+// ✅ 請填入你剛剛測試成功的 V6.0 合約地址
 const CONTRACT_ADDRESS = "0xD4991248BdBCE99b04Ef4111cDf1e7f90ed904F7";
 
 const abi = [
     "function ticketPrice() view returns (uint256)",
     "function buyTicket(bytes _encryptedChoices) external payable",
-    "function pendingWinnings(address) view returns (uint256)", // 查詢獎金
-    "function claimPrize() external", // 領獎
-    "function performUpkeep(string) external", // 管理員開獎
-    "function isMarketOpen() view returns (bool)" // 查詢市場狀態
+    "function pendingWinnings(address) view returns (uint256)",
+    "function claimPrize() external",
+    "function performUpkeep(string) external",
+    "function isMarketOpen() view returns (bool)"
 ];
 
-let provider;
-let signer;
-let contract;
+let provider, signer, contract;
 let price = 0;
 let userAddress = "";
+let selectedNumbers = []; // 儲存玩家選的號碼 (例如 ["A1", "B2"])
+
+// 初始化：產生 7x7 矩陣按鈕
+window.onload = function() {
+    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const container = document.getElementById('gridContainer');
+    
+    rows.forEach(r => {
+        for (let c = 1; c <= 7; c++) {
+            const coord = r + c;
+            const btn = document.createElement('div');
+            btn.className = 'grid-btn';
+            btn.innerText = coord;
+            btn.onclick = () => toggleSelection(btn, coord);
+            container.appendChild(btn);
+        }
+    });
+};
+
+// 處理選號邏輯
+function toggleSelection(btn, coord) {
+    if (selectedNumbers.includes(coord)) {
+        // 取消選擇
+        selectedNumbers = selectedNumbers.filter(n => n !== coord);
+        btn.classList.remove('selected');
+    } else {
+        // 選擇 (限制最多 6 個)
+        if (selectedNumbers.length >= 6) {
+            alert("最多只能選擇 6 個號碼！");
+            return;
+        }
+        selectedNumbers.push(coord);
+        btn.classList.add('selected');
+    }
+    updateSelectionUI();
+}
+
+function updateSelectionUI() {
+    document.getElementById('selectedCount').innerText = selectedNumbers.length;
+    document.getElementById('selectedCoords').innerText = selectedNumbers.length > 0 ? selectedNumbers.join(", ") : "(尚未選擇)";
+    
+    // 只有連線且選滿 6 個時，才啟用購買按鈕
+    const buyBtn = document.getElementById('btnBuy');
+    if (contract && selectedNumbers.length === 6) {
+        buyBtn.disabled = false;
+        buyBtn.innerText = `💰 購買彩券 (${selectedNumbers.length}/6)`;
+    } else {
+        buyBtn.disabled = true;
+        buyBtn.innerText = selectedNumbers.length === 6 ? "💰 請先連線錢包" : `💰 請選擇 6 個號碼 (${selectedNumbers.length}/6)`;
+    }
+}
 
 // 1. 連線錢包
 async function connectWallet() {
@@ -26,19 +74,13 @@ async function connectWallet() {
             userAddress = await signer.getAddress();
             
             document.getElementById("status").innerText = "🟢 已連線: " + userAddress;
-            
-            // 連線合約
             contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
             
-            // 讀取票價
             const priceWei = await contract.ticketPrice();
             price = priceWei;
             document.getElementById("priceInfo").innerText = `🎫 當前票價: ${ethers.formatEther(priceWei)} POL`;
             
-            // 啟用購票按鈕
-            document.getElementById("btnBuy").disabled = false;
-
-            // 連線後立刻檢查有沒有獎金
+            updateSelectionUI(); // 重新檢查按鈕狀態
             checkWinnings();
 
         } catch (error) {
@@ -49,47 +91,56 @@ async function connectWallet() {
     }
 }
 
-// 2. 購買票券
+// 2. 購買票券 (將玩家選的號碼送上鏈)
 async function buyTicket() {
+    if (selectedNumbers.length !== 6) return alert("請先選擇 6 個號碼！");
     if (!contract) return alert("請先連線錢包！");
+    
     try {
-        // 模擬玩家的選擇 (目前固定，未來可改選號介面)
-        const mockChoice = ethers.toUtf8Bytes("A1,B2,C3,D4,E5,F6");
+        // 將陣列轉為字串 (例如 "A1,B2,C3,D4,E5,F6") 再轉為 Bytes
+        const choiceString = selectedNumbers.join(",");
+        const encryptedChoice = ethers.toUtf8Bytes(choiceString);
+        
         document.getElementById("status").innerText = "⏳ 正在發送交易...請在錢包確認";
         
-        // 發送交易
-        const tx = await contract.buyTicket(mockChoice, { value: price });
+        const tx = await contract.buyTicket(encryptedChoice, { value: price });
         document.getElementById("status").innerText = "⏳ 交易確認中...等待區塊打包";
         await tx.wait();
         
-        document.getElementById("status").innerText = "✅ 購票成功！資金已進入合約金庫！";
-        alert("購票成功！請等待開獎。");
+        document.getElementById("status").innerText = "✅ 購票成功！祝您中獎！";
+        alert(`購票成功！您選擇了: ${choiceString}`);
+        
+        // 清空選擇
+        selectedNumbers = [];
+        document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('selected'));
+        updateSelectionUI();
+        
     } catch (error) {
         console.error(error);
         document.getElementById("status").innerText = "❌ 失敗: " + error.message;
     }
 }
 
-// 3. 檢查獎金 (讀取合約上的 pendingWinnings)
+// 3. 檢查獎金
 async function checkWinnings() {
     if (!contract) return;
     try {
-        document.getElementById("claimStatus").innerText = "正在查詢鏈上數據...";
+        document.getElementById("claimStatus").innerText = "查詢中...";
         const winnings = await contract.pendingWinnings(userAddress);
         
         if (winnings > 0) {
             const amount = ethers.formatEther(winnings);
-            document.getElementById("winMessage").innerText = `🎉 恭喜！你有 ${amount} POL 獎金尚未領取！`;
+            document.getElementById("winMessage").innerText = `🎉 恭喜！你有 ${amount} POL 獎金！`;
             document.getElementById("winMessage").style.display = "block";
-            document.getElementById("btnClaim").style.display = "block"; // 顯示領獎按鈕
+            document.getElementById("btnClaim").style.display = "block";
             document.getElementById("claimStatus").innerText = "待領取";
         } else {
             document.getElementById("winMessage").style.display = "none";
             document.getElementById("btnClaim").style.display = "none";
-            document.getElementById("claimStatus").innerText = "目前無未領獎金";
+            document.getElementById("claimStatus").innerText = "無未領獎金";
         }
     } catch (error) {
-        console.error("查詢獎金失敗:", error);
+        console.error(error);
     }
 }
 
@@ -97,37 +148,28 @@ async function checkWinnings() {
 async function claimPrize() {
     if (!contract) return;
     try {
-        document.getElementById("claimStatus").innerText = "⏳ 提領請求發送中...請確認錢包";
+        document.getElementById("claimStatus").innerText = "⏳ 提領請求發送中...";
         const tx = await contract.claimPrize();
         await tx.wait();
-        
-        document.getElementById("claimStatus").innerText = "✅ 提領成功！資金已轉入您的錢包。";
+        document.getElementById("claimStatus").innerText = "✅ 提領成功！";
         alert("獎金已入帳！");
-        
-        // 提領後重新檢查 (按鈕應該會消失)
         checkWinnings();
     } catch (error) {
         console.error(error);
-        document.getElementById("claimStatus").innerText = "❌ 提領失敗: " + error.message;
+        document.getElementById("claimStatus").innerText = "❌ 失敗: " + error.message;
     }
 }
 
-// 5. 管理員開獎 (強制加上 gasLimit 解決報錯)
+// 5. 管理員開獎 (已修正 Gas)
 async function drawWinner() {
     if (!contract) return;
-    
-    // 這段 JS 代碼會傳給 Chainlink 去執行 (這裡僅做簡單模擬回傳隨機數)
     const source = "return Functions.encodeUint256(Math.floor(Math.random() * 100));"; 
-    
     try {
-        // 🚀 關鍵修正：強制設定 gasLimit 為 500,000
-        // 這能繞過 MetaMask 的估算錯誤 (Missing Revert Data)
-        const tx = await contract.performUpkeep(source, { gasLimit: 500000 });
-        
-        document.getElementById("status").innerText = "⏳ 開獎請求已發送...等待 Chainlink 回應";
+        // 設定 300,000 以符合 Chainlink 限制
+        const tx = await contract.performUpkeep(source, { gasLimit: 300000 });
+        document.getElementById("status").innerText = "⏳ 開獎請求已發送...";
         await tx.wait();
-        
-        alert("開獎請求已成功發送給 Chainlink！\n請等待約 1~2 分鐘，然後點擊「重新整理我的獎金」查看結果。");
+        alert("開獎請求已發送！請稍待 1~2 分鐘後檢查獎金。");
     } catch (error) {
         console.error(error);
         alert("開獎失敗: " + error.message);
