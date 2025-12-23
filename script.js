@@ -1,4 +1,4 @@
-// ✅ V7.0 核心邏輯版：Chainlink 執行反向樂透演算法 (模擬數據)
+// ✅ V7.1 完整修復版：加大開獎 Gas Limit 防止交易失敗
 // 合約地址 (已驗證 V6.0)
 const CONTRACT_ADDRESS = "0xD4991248BdBCE99b04Ef4111cDf1e7f90ed904F7";
 
@@ -173,12 +173,11 @@ async function claimPrize() {
     }
 }
 
-// 5. 管理員開獎 (🔥 V7.0 重點：注入反向樂透邏輯)
+// 5. 管理員開獎 (🔥 V7.1：加大 Gas Limit 防止 Revert)
 async function drawWinner() {
     if (!contract) return;
     
-    // 這段 JavaScript 代碼會被傳送到 Chainlink 的伺服器上去執行
-    // 我們在這裡模擬了「5 位玩家」的下注資料，來測試邏輯是否正確
+    // V7 邏輯代碼：Chainlink 上的運算邏輯
     const source = `
         // 模擬數據：假設這是從區塊鏈上讀取到的選號
         const allBets = [
@@ -197,7 +196,7 @@ async function drawWinner() {
             }
         }
 
-        // 步驟 B: 找出「被選次數最少」是多少次 (例如：最少被選了 1 次)
+        // 步驟 B: 找出「被選次數最少」是多少次
         let minCount = 999999;
         for (const coord in counts) {
             if (counts[coord] < minCount) {
@@ -205,21 +204,19 @@ async function drawWinner() {
             }
         }
         
-        // 步驟 C: 為了讓開獎有結果，我們回傳「隨機數」來決定最終贏家
-        // (在未來的 V8 中，這裡會回傳真正的贏家索引)
-        // 這次我們回傳 minCount (最少票數) 讓你能感覺到它有在算數學
-        
+        // 步驟 C: 回傳一個隨機數來決定贏家 (目前 V7 階段的測試回傳)
         return Functions.encodeUint256(Math.floor(Math.random() * 100)); 
     `;
     
     try {
-        // 設定 300,000 以符合 Chainlink 限制
-        const tx = await contract.performUpkeep(source, { gasLimit: 300000 });
+        // 🚀 關鍵修正：將 gasLimit 提高到 600,000
+        // 之前設定 300,000 導致實際耗用 297,000 時容易交易失敗
+        const tx = await contract.performUpkeep(source, { gasLimit: 600000 });
         
         document.getElementById("status").innerText = "⏳ V7 邏輯計算請求已發送...";
         await tx.wait();
         
-        alert("開獎請求已發送！\n這次 Chainlink 會執行反向樂透的統計運算。\n請稍待 1~2 分鐘後檢查獎金。");
+        alert("開獎請求已發送！\n請稍待 1~2 分鐘後檢查獎金。");
     } catch (error) {
         console.error(error);
         alert("開獎失敗: " + error.message);
