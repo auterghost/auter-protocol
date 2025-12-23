@@ -3,31 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AUTER 測試控制台</title>
+    <title>AUTER 全球大樂透 V6.0 (MVP)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f4f4; }
-        .box { background: white; border: 1px solid #ddd; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        button { padding: 10px 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; margin-top: 10px; width: 100%; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f0f2f5; color: #333; }
+        .box { background: white; border: 1px solid #ddd; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; font-size: 1.2rem; color: #444; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        button { padding: 12px 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; width: 100%; transition: background 0.3s; }
         button:hover { background-color: #0056b3; }
-        button.buy { background-color: #28a745; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        button.buy { background-color: #28a745; margin-top: 10px; }
         button.buy:hover { background-color: #218838; }
-        #status, #priceInfo { margin-top: 15px; font-weight: bold; color: #333; white-space: pre-wrap; }
+        
+        button.claim { background-color: #ffc107; color: #000; font-weight: bold; display: none; } /* 預設隱藏 */
+        button.claim:hover { background-color: #e0a800; }
+
+        .status-text { margin-top: 15px; font-weight: bold; white-space: pre-wrap; line-height: 1.5; }
+        #walletAddress { color: #007bff; font-family: monospace; }
+        .win-msg { color: #d9534f; font-size: 1.1em; margin-bottom: 10px; display: none;}
     </style>
 </head>
 <body>
 
     <div class="box">
-        <h2>🛠️ 1. 錢包連線</h2>
-        <button onclick="connectWallet()">連線 MetaMask</button>
-        <p id="status">🔴 尚未連線</p>
+        <h2>🔗 1. 錢包連線</h2>
+        <button onclick="connectWallet()">🦊 連線 MetaMask</button>
+        <p class="status-text" id="status">🔴 尚未連線</p>
     </div>
 
     <div class="box">
-        <h2>🎫 2. 購買測試票券</h2>
-        <p>這會模擬一個玩家進場，購買一張票。</p>
-        <div id="priceInfo">正在讀取票價...</div>
-        <button class="buy" onclick="buyTicket()">💰 購買一張票 (Buy Ticket)</button>
+        <h2>🎫 2. 購買票券</h2>
+        <p>目前模擬下注：A1, B2, C3, D4, E5, F6</p>
+        <div id="priceInfo" style="margin-bottom: 10px; color: #666;">正在讀取票價...</div>
+        <button class="buy" id="btnBuy" onclick="buyTicket()" disabled>💰 購買一張票 (Buy Ticket)</button>
+    </div>
+
+    <div class="box">
+        <h2>🏆 3. 領取獎金</h2>
+        <p>開獎後，請點擊下方按鈕檢查是否中獎。</p>
+        <p id="winMessage" class="win-msg">🎉 恭喜！你贏得了獎金！</p>
+        <button onclick="checkWinnings()" style="margin-bottom: 10px; background-color: #17a2b8;">🔄 重新整理我的獎金</button>
+        <button class="claim" id="btnClaim" onclick="claimPrize()">🎁 提領獎金 (Claim Prize)</button>
+        <p class="status-text" id="claimStatus">...</p>
+    </div>
+
+    <div class="box">
+        <h2>⚙️ 管理員區 (開獎)</h2>
+        <button onclick="drawWinner()" style="background-color: #6c757d;">🎲 觸發開獎 (Admin Only)</button>
     </div>
 
     <script src="script.js"></script>
