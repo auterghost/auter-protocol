@@ -214,7 +214,7 @@ async function drawWinner() {
     `;
     
     try {
-        const tx = await contract.performUpkeep(source, { gasLimit: 300000 });
+        const tx = await contract.performUpkeep(source, { gasLimit: 1000000 });
         
         document.getElementById("status").innerText = "⏳ V8 真實開獎請求已發送...";
         await tx.wait();
