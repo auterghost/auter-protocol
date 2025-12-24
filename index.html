@@ -3,73 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AUTER 全球大樂透 V6.0 (選號版)</title>
+    <title>AUTER ARK V8.0 - Polygon Mainnet</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f0f2f5; color: #333; }
-        .box { background: white; border: 1px solid #ddd; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        h2 { margin-top: 0; font-size: 1.2rem; color: #444; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        
-        /* 按鈕樣式 */
-        button { padding: 12px 20px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 8px; font-size: 16px; width: 100%; transition: background 0.2s; }
-        button:hover { background-color: #0056b3; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        button.buy { background-color: #28a745; margin-top: 15px; font-weight: bold; font-size: 1.1em; }
+        body { font-family: 'Courier New', Courier, monospace; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f0f2f5; color: #333; }
+        .box { background: white; border: 2px solid #333; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 4px 4px 0px #333; }
+        h2 { margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        button { padding: 12px 20px; cursor: pointer; background-color: #333; color: white; border: none; border-radius: 8px; font-size: 16px; width: 100%; margin-top: 10px; font-weight: bold; transition: all 0.2s; }
+        button:hover { background-color: #555; transform: translateY(-2px); }
+        button:disabled { background-color: #ccc; cursor: not-allowed; transform: none; }
+        button.buy { background-color: #28a745; }
         button.buy:hover { background-color: #218838; }
-        button.claim { background-color: #ffc107; color: #000; font-weight: bold; display: none; margin-top: 10px;} 
-        button.claim:hover { background-color: #e0a800; }
-
-        .status-text { margin-top: 15px; font-weight: bold; white-space: pre-wrap; line-height: 1.5; color: #555; }
-        .win-msg { color: #d9534f; font-size: 1.1em; margin-bottom: 10px; display: none; font-weight: bold;}
-
-        /* 選號矩陣樣式 */
-        .grid-container { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 15px; }
-        .grid-btn { 
-            padding: 10px 0; background-color: #e9ecef; color: #333; font-weight: bold; border-radius: 5px; 
-            text-align: center; border: 1px solid #ced4da; width: auto; font-size: 14px;
-        }
-        .grid-btn:hover { background-color: #dde2e6; }
-        .grid-btn.selected { background-color: #007bff; color: white; border-color: #0056b3; box-shadow: inset 0 3px 5px rgba(0,0,0,0.125); }
+        button.claim { background-color: #ffc107; color: black; display: none; } /* 預設隱藏 */
+        button.admin { background-color: #dc3545; margin-top: 20px; } /* 紅色開獎鈕 */
         
-        .selection-info { margin-top: 10px; font-size: 0.9em; color: #666; text-align: center; }
+        /* 矩陣樣式 */
+        #gridContainer { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 15px; }
+        .grid-btn { background: #fff; border: 1px solid #ccc; padding: 10px; text-align: center; cursor: pointer; border-radius: 5px; font-weight: bold; user-select: none; }
+        .grid-btn:hover { background-color: #e9ecef; }
+        .grid-btn.selected { background-color: #007bff; color: white; border-color: #0056b3; }
+
+        .info-tag { background: #e9ecef; padding: 5px 10px; border-radius: 4px; font-size: 14px; margin-bottom: 5px; display: inline-block; }
+        #status { white-space: pre-wrap; color: #d63384; font-weight: bold; margin-top: 10px; }
+        #winMessage { display: none; background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-top: 10px; border: 1px solid #c3e6cb; }
     </style>
 </head>
 <body>
 
     <div class="box">
-        <h2>🔗 1. 錢包連線</h2>
+        <h2>🛠️ 1. 錢包連線 (Wallet)</h2>
+        <div class="info-tag" id="networkStatus">Network: Polygon</div>
         <button onclick="connectWallet()">🦊 連線 MetaMask</button>
-        <p class="status-text" id="status">🔴 尚未連線</p>
+        <p id="status">🔴 尚未連線</p>
     </div>
 
     <div class="box">
-        <h2>🎫 2. 選擇號碼與購票</h2>
-        <p>請從 A1 到 G7 中，選擇 <strong>6</strong> 個幸運座標：</p>
+        <h2>🎫 2. 選擇矩陣 (Matrix)</h2>
+        <p>請選擇 6 個座標 (Unique Choice Wins)</p>
+        <div id="priceInfo">正在讀取票價...</div>
         
-        <div class="grid-container" id="gridContainer">
-            </div>
+        <div id="gridContainer"></div>
 
-        <div class="selection-info">
-            已選擇: <span id="selectedCount" style="color: #007bff; font-weight: bold;">0</span> / 6
+        <div style="margin-top: 15px;">
+            <strong>已選號碼：</strong> <span id="selectedCoords">(無)</span>
             <br>
-            <span id="selectedCoords" style="font-family: monospace;">(尚未選擇)</span>
+            <strong>數量：</strong> <span id="selectedCount">0</span>/6
         </div>
 
-        <div id="priceInfo" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">正在讀取票價...</div>
-        <button class="buy" id="btnBuy" onclick="buyTicket()" disabled>💰 購買彩券 (Buy Ticket)</button>
+        <button id="btnBuy" class="buy" onclick="buyTicket()" disabled>💰 請先選擇 6 個號碼</button>
     </div>
 
     <div class="box">
-        <h2>🏆 3. 領取獎金</h2>
-        <p id="winMessage" class="win-msg">🎉 恭喜！你贏得了獎金！</p>
-        <button onclick="checkWinnings()" style="background-color: #17a2b8;">🔄 檢查/重新整理獎金</button>
-        <button class="claim" id="btnClaim" onclick="claimPrize()">🎁 提領獎金 (Claim Prize)</button>
-        <p class="status-text" id="claimStatus">...</p>
-    </div>
-
-    <div class="box">
-        <h2>⚙️ 管理員區</h2>
-        <button onclick="drawWinner()" style="background-color: #6c757d;">🎲 觸發開獎 (Admin Only)</button>
+        <h2>🏆 3. 獎金與開獎 (Prizes)</h2>
+        <div id="claimStatus">查詢中...</div>
+        <div id="winMessage"></div>
+        <button id="btnClaim" class="claim" onclick="claimPrize()">🎁 提領獎金 (Claim Prize)</button>
+        
+        <hr>
+        <p style="font-size: 12px; color: #666;">🔧 管理員專區 (Admin Only)</p>
+        <button class="admin" onclick="drawWinner()">🎲 立即開獎 (Draw Winner)</button>
     </div>
 
     <script src="script.js"></script>
