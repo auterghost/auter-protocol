@@ -1,14 +1,15 @@
-// ✅ V7.1 完整修復版：加大開獎 Gas Limit 防止交易失敗
-// 合約地址 (已驗證 V6.0)
-const CONTRACT_ADDRESS = "0xD4991248BdBCE99b04Ef4111cDf1e7f90ed904F7";
+// ✅ V8.0 最終完成版：真實區塊鏈數據讀取 + 反向樂透邏輯
+// ⚠️ 請在此處填入你剛才部署的 V8 合約地址
+const CONTRACT_ADDRESS = "0xA110ba1acb8c7e287D3963674B1dd527d6417bC2"; 
 
 const abi = [
     "function ticketPrice() view returns (uint256)",
     "function buyTicket(bytes _encryptedChoices) external payable",
-    "function pendingWinnings(address) view returns (uint256)", // 查詢獎金
-    "function claimPrize() external", // 領獎
-    "function performUpkeep(string) external", // 管理員開獎
-    "function isMarketOpen() view returns (bool)" // 查詢市場狀態
+    "function pendingWinnings(address) view returns (uint256)",
+    "function claimPrize() external",
+    "function performUpkeep(string) external",
+    "function isMarketOpen() view returns (bool)",
+    "function getAllBets() view returns (address[], bytes[])"
 ];
 
 let provider, signer, contract;
@@ -16,19 +17,15 @@ let price = 0;
 let userAddress = "";
 let selectedNumbers = []; 
 
-// 🔥 監聽錢包切換：只要帳號變更，網頁自動重整
 if (window.ethereum) {
     window.ethereum.on('accountsChanged', function (accounts) {
         window.location.reload();
     });
 }
 
-// 初始化
 window.onload = function() {
     const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
     const container = document.getElementById('gridContainer');
-    
-    // 產生 7x7 矩陣按鈕
     rows.forEach(r => {
         for (let c = 1; c <= 7; c++) {
             const coord = r + c;
@@ -70,11 +67,9 @@ function updateSelectionUI() {
     }
 }
 
-// 1. 連線錢包 (強制選擇帳號)
 async function connectWallet() {
     if (window.ethereum) {
         try {
-            // 強制跳出 MetaMask 帳號選擇視窗
             await window.ethereum.request({
                 method: "wallet_requestPermissions",
                 params: [{ eth_accounts: {} }]
@@ -85,7 +80,6 @@ async function connectWallet() {
             userAddress = await signer.getAddress();
             
             document.getElementById("status").innerText = "🟢 已連線: " + userAddress;
-            
             contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
             
             const priceWei = await contract.ticketPrice();
@@ -96,50 +90,41 @@ async function connectWallet() {
             checkWinnings();
 
         } catch (error) {
-            if (error.code !== 4001) {
-                alert("連線失敗: " + error.message);
-            }
+            if (error.code !== 4001) alert("連線失敗: " + error.message);
         }
     } else {
         alert("請安裝 MetaMask!");
     }
 }
 
-// 2. 購買票券
 async function buyTicket() {
     if (selectedNumbers.length !== 6) return alert("請先選擇 6 個號碼！");
     if (!contract) return alert("請先連線錢包！");
-    
     try {
         const choiceString = selectedNumbers.join(",");
         const encryptedChoice = ethers.toUtf8Bytes(choiceString);
         
-        document.getElementById("status").innerText = "⏳ 正在發送交易...請在錢包確認";
-        
+        document.getElementById("status").innerText = "⏳ 發送交易中...";
         const tx = await contract.buyTicket(encryptedChoice, { value: price });
-        document.getElementById("status").innerText = "⏳ 交易確認中...等待區塊打包";
+        document.getElementById("status").innerText = "⏳ 等待打包...";
         await tx.wait();
         
-        document.getElementById("status").innerText = "✅ 購票成功！祝您中獎！";
-        alert(`購票成功！您選擇了: ${choiceString}`);
-        
+        document.getElementById("status").innerText = "✅ 購票成功！";
+        alert(`購票成功！`);
         selectedNumbers = [];
         document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('selected'));
         updateSelectionUI();
-        
     } catch (error) {
         console.error(error);
         document.getElementById("status").innerText = "❌ 失敗: " + error.message;
     }
 }
 
-// 3. 檢查獎金
 async function checkWinnings() {
     if (!contract) return;
     try {
-        document.getElementById("claimStatus").innerText = "查詢鏈上數據中...";
+        document.getElementById("claimStatus").innerText = "查詢中...";
         const winnings = await contract.pendingWinnings(userAddress);
-        
         if (winnings > 0) {
             const amount = ethers.formatEther(winnings);
             document.getElementById("winMessage").innerText = `🎉 恭喜！你有 ${amount} POL 獎金！`;
@@ -151,21 +136,17 @@ async function checkWinnings() {
             document.getElementById("btnClaim").style.display = "none";
             document.getElementById("claimStatus").innerText = "無未領獎金";
         }
-    } catch (error) {
-        console.error(error);
-    }
+    } catch (error) { console.error(error); }
 }
 
-// 4. 提領獎金
 async function claimPrize() {
     if (!contract) return;
     try {
-        document.getElementById("claimStatus").innerText = "⏳ 提領請求發送中...";
+        document.getElementById("claimStatus").innerText = "⏳ 提領中...";
         const tx = await contract.claimPrize();
         await tx.wait();
-        
-        document.getElementById("claimStatus").innerText = "✅ 提領成功！資金已入帳。";
-        alert("獎金已成功轉入您的錢包！");
+        document.getElementById("claimStatus").innerText = "✅ 提領成功！";
+        alert("獎金已入帳！");
         checkWinnings();
     } catch (error) {
         console.error(error);
@@ -173,50 +154,72 @@ async function claimPrize() {
     }
 }
 
-// 5. 管理員開獎 (🔥 V7.1：加大 Gas Limit 防止 Revert)
+// 🔥 V8.0 核心：真正的反向樂透邏輯 (Chainlink 執行)
 async function drawWinner() {
     if (!contract) return;
     
-    // V7 邏輯代碼：Chainlink 上的運算邏輯
+    // 這段代碼會在 Chainlink 的伺服器上執行
     const source = `
-        // 模擬數據：假設這是從區塊鏈上讀取到的選號
-        const allBets = [
-            ["A1", "A2", "A3", "A4", "A5", "A6"], // 玩家 1 (全A)
-            ["A1", "A2", "A3", "A4", "A5", "B1"], // 玩家 2 (選了 B1)
-            ["A1", "C3", "D4", "E5", "F6", "G7"], // 玩家 3 (選了 G7, F6...)
-            ["A1", "A2", "A3", "A4", "A5", "A6"], // 玩家 4 (跟玩家 1 重複)
-            ["B1", "B2", "B3", "B4", "B5", "B6"]  // 玩家 5 (跟玩家 2 的 B1 重複)
-        ];
+        const contractAddress = args[0];
+        const data = "0x4d588439"; // getAllBets() selector
 
-        // 步驟 A: 統計每個座標被選了幾次
+        const response = await Functions.makeEthereumCall({
+            to: contractAddress,
+            data: data,
+        });
+
+        if (response.error) {
+            throw Error("Chainlink Call Failed");
+        }
+
+        const returnType = ["address[]", "bytes[]"];
+        const decoded = ethers.utils.defaultAbiCoder.decode(returnType, response.returnData);
+        const players = decoded[0];
+        const rawBets = decoded[1];
+
         const counts = {};
-        for (const bet of allBets) {
-            for (const coord of bet) {
-                counts[coord] = (counts[coord] || 0) + 1;
+        const playerBets = [];
+
+        for (let i = 0; i < rawBets.length; i++) {
+            const hex = rawBets[i].slice(2);
+            let str = "";
+            for (let n = 0; n < hex.length; n += 2) {
+                str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
+            }
+            
+            const coords = str.split(",");
+            playerBets.push({ playerIndex: i, bets: coords });
+
+            coords.forEach(c => {
+                counts[c] = (counts[c] || 0) + 1;
+            });
+        }
+
+        let bestScore = 999999;
+        let winnerIndex = 0;
+
+        for (let i = 0; i < playerBets.length; i++) {
+            let score = 0;
+            playerBets[i].bets.forEach(c => {
+                score += counts[c];
+            });
+
+            if (score < bestScore) {
+                bestScore = score;
+                winnerIndex = i;
             }
         }
 
-        // 步驟 B: 找出「被選次數最少」是多少次
-        let minCount = 999999;
-        for (const coord in counts) {
-            if (counts[coord] < minCount) {
-                minCount = counts[coord];
-            }
-        }
-        
-        // 步驟 C: 回傳一個隨機數來決定贏家 (目前 V7 階段的測試回傳)
-        return Functions.encodeUint256(Math.floor(Math.random() * 100)); 
+        return Functions.encodeUint256(winnerIndex);
     `;
     
     try {
-        // 🚀 關鍵修正：將 gasLimit 提高到 600,000
-        // 之前設定 300,000 導致實際耗用 297,000 時容易交易失敗
         const tx = await contract.performUpkeep(source, { gasLimit: 600000 });
         
-        document.getElementById("status").innerText = "⏳ V7 邏輯計算請求已發送...";
+        document.getElementById("status").innerText = "⏳ V8 真實開獎請求已發送...";
         await tx.wait();
         
-        alert("開獎請求已發送！\n請稍待 1~2 分鐘後檢查獎金。");
+        alert("開獎請求已發送！\nChainlink 正在讀取鏈上數據並計算最獨特的贏家。\n請稍待 2 分鐘後檢查。");
     } catch (error) {
         console.error(error);
         alert("開獎失敗: " + error.message);
