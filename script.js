@@ -1,6 +1,6 @@
 // ✅ V8.0 最終完成版：真實區塊鏈數據讀取 + 反向樂透邏輯
 // ⚠️ 請在此處填入你剛才部署的 V8 合約地址
-const CONTRACT_ADDRESS = "0xA110ba1acb8c7e287D3963674B1dd527d6417bC2"; 
+const CONTRACT_ADDRESS = "0xCfbeEea600AE040fA653406A949dE0f0874d82F6"; 
 
 const abi = [
     "function ticketPrice() view returns (uint256)",
