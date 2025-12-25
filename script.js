@@ -1,10 +1,9 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ PASTE YOUR DEPLOYED V9 CONTRACT ADDRESS HERE AFTER DEPLOYMENT
-const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; 
-
-const CHAIN_ID = 137; // Polygon Mainnet
+// ⚠️ 請確認這裡是你已經部署的 V9 合約地址
+const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f";
+const CHAIN_ID = 178; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
 // --- ABI (Updated for V9) ---
@@ -19,11 +18,12 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ FIX: Switched to polygon-rpc.com to avoid "Response is too large" HTML errors
+// ⚠️ V9.3 重大修正：
+// 1. 棄用 polygon-rpc.com (因為會回傳 HTML 導致 Response too large)
+// 2. 改用 Ankr 節點 (更穩定且回應輕量)
 const CHAINLINK_SOURCE = `
-// 1. 設定 Polygon 主網 RPC (使用聚合器以提高穩定性)
-const rpcUrl = "https://polygon-rpc.com";
-
+// 1. 設定 Polygon 主網 RPC (使用 Ankr)
+const rpcUrl = "https://rpc.ankr.com/polygon"; 
 const contractAddress = args[0];
 const data = "0x5d62d910"; // getPlayerCount() selector
 
@@ -47,9 +47,10 @@ const response = await request;
 if (response.error) {
   throw Error("RPC Request Failed");
 }
-// 這裡增加檢查，確保沒有回傳空值或 HTML 錯誤
+
+// 嚴格檢查：確保回傳的是數據而不是 HTML 網頁
 if (!response.data || !response.data.result) {
-  throw Error("Invalid RPC Response: " + JSON.stringify(response));
+  throw Error("Invalid RPC Response - likely HTML error");
 }
 
 // 5. 解析玩家人數
@@ -57,18 +58,22 @@ const hexCount = response.data.result;
 const count = parseInt(hexCount, 16);
 console.log("Player Count:", count);
 
-if (isNaN(count) || count === 0) {
-  throw Error("No players or invalid count data");
+if (isNaN(count)) {
+  throw Error("Invalid count data");
 }
 
-// 6. 決定贏家 (為了通過 Chainlink 共識，暫時使用確定性算法)
-// V10 我們會升級成 VRF 或 Commit-Reveal
-const seed = count * 997 + 123; 
+// 如果沒人玩，避免除以零錯誤
+if (count === 0) {
+    return Functions.encodeUint256(BigInt(0));
+}
+
+// 6. 決定贏家 (確定性算法)
+const seed = count * 997 + 123;
 const winnerIndex = seed % count;
 
 console.log("Winner Index:", winnerIndex);
 
-// 7. 回傳結果 (BigInt 修正已保留)
+// 7. 回傳結果
 return Functions.encodeUint256(BigInt(winnerIndex));
 `;
 
@@ -155,7 +160,6 @@ async function connectWallet() {
         
         const bal = await provider.getBalance(walletAddress);
         document.getElementById('balance-display').innerText = `${ethers.formatEther(bal).slice(0,5)} POL`;
-
     } catch (e) {
         console.error("Wallet connection failed", e);
     }
@@ -166,7 +170,7 @@ async function refreshData() {
     try {
         const players = await contract.getPlayerCount();
         document.getElementById('player-count').innerText = players;
-        
+
         const balance = await provider.getBalance(CONTRACT_ADDRESS);
         document.getElementById('pool-size').innerText = ethers.formatEther(balance);
 
@@ -207,7 +211,7 @@ buyBtn.onclick = async () => {
             const col = ((num - 1) % 7) + 1;
             return `${row}${col}`;
         }).join(",");
-        
+
         const bytes = ethers.toUtf8Bytes(coords);
         const tx = await contract.buyTicket(bytes, { value: TICKET_PRICE });
         await tx.wait();
@@ -226,9 +230,10 @@ document.getElementById('draw-btn').onclick = async () => {
     if (!contract) return alert("Contract address not set in script.js");
     setLoading(true, "REQUESTING RANDOMNESS...");
     try {
+        // V9.3: 這裡會將新的 Ankr 腳本傳給 Chainlink
         const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        alert("Draw Initiated! Oracle is processing...");
+        alert("Draw Initiated! Oracle is processing (Wait ~1 min)...");
     } catch (e) {
         alert("Draw Failed: " + (e.reason || "Check console"));
     }
