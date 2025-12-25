@@ -1,12 +1,12 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 請務必填入您剛剛部署的 V16 合約地址
-const CONTRACT_ADDRESS = "0xd10a40aA76eeE84C581E5006030fFf3cde15086A"; 
+// ⚠️ 請務必在此貼上您剛剛部署的 V16.3 合約地址！
+const CONTRACT_ADDRESS = ""; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
-// --- ABI (Compatible with V16) ---
+// --- ABI (V16 Compatible) ---
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
@@ -24,7 +24,7 @@ const ABI = [
 let provider, signer, contract;
 let currentSelection = [];
 let walletAddress = null;
-let currentKeyHash = ""; 
+let currentKeyHash = "";
 
 // --- DOM ELEMENTS ---
 const connectBtn = document.getElementById('connect-btn');
@@ -54,7 +54,6 @@ const closeWinnerBtn = document.getElementById('close-winner');
 
 // --- INITIALIZATION ---
 console.log("Auter Ark Script Loaded");
-
 function initGrid() {
     if (!gridContainer) return;
     gridContainer.innerHTML = '';
@@ -190,7 +189,6 @@ buyBtn.onclick = async () => {
             const col = ((num - 1) % 7) + 1;
             return `${row}${col}`;
         }).join(",");
-
         const bytes = ethers.toUtf8Bytes(coords);
         const tx = await contract.buyTicket(bytes, { value: TICKET_PRICE });
         await tx.wait();
@@ -210,7 +208,6 @@ checkBtn.onclick = async () => {
     if (!contract) return alert("Connect Wallet first");
     debugModal.classList.remove('hidden');
     debugContent.innerHTML = `<p class="text-center animate-pulse text-cyan-400">CONNECTING TO CONTRACT MEMORY...</p>`;
-
     try {
         const [
             coordinatorAddr,
@@ -233,26 +230,30 @@ checkBtn.onclick = async () => {
         let html = `
             <div class="grid grid-cols-1 gap-3">
                 <div class="bg-slate-800 p-3 rounded border-2 border-cyan-600/50 shadow-[0_0_15px_rgba(8,145,178,0.3)]">
-                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Current Contract Address (V16)</p>
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Current Contract Address</p>
                     <p class="text-white text-sm break-all font-mono bg-black/30 p-2 rounded mt-1 select-all">${CONTRACT_ADDRESS}</p>
                     <p class="text-xs text-cyan-400 mt-2">👉 COPY THIS ADDRESS and add it as "Consumer" in Chainlink Dashboard.</p>
                 </div>
                 
                 <div class="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center">
                     <div class="w-2/3">
-                        <p class="text-xs text-slate-500">Subscription ID</p>
+                        <p class="text-xs text-slate-500">Subscription ID (Inside Contract)</p>
                         <p class="text-sm sm:text-base font-bold text-yellow-400 break-all font-mono">${detectedSubId}</p>
                     </div>
                     <div class="text-right w-1/3 pl-2">
-                        <p class="text-xs text-slate-500">Balance</p>
+                        <p class="text-xs text-slate-500">Contract Balance</p>
                         <p class="text-xl font-bold ${Number(detectedBalance) >= 1 ? 'text-green-400' : 'text-red-500'}">${detectedBalance} POL</p>
                     </div>
                 </div>
+
+                <div class="bg-slate-800 p-3 rounded border border-slate-700">
+                     <p class="text-xs text-slate-500">VRF Coordinator (Polygon)</p>
+                     <p class="text-xs text-slate-400 break-all">${coordinatorAddr}</p>
+                </div>
                 
                 <div class="bg-slate-800 p-3 rounded border border-slate-700">
-                     <p class="text-xs text-slate-500">Key Hash (V2.5 500gwei)</p>
+                     <p class="text-xs text-slate-500">Key Hash (Gas Lane)</p>
                      <p class="text-xs text-slate-400 break-all">${keyHash}</p>
-                     <p class="text-[10px] text-green-500 mt-1">✅ Using Standard V2.5 Hash</p>
                 </div>
             </div>
         `;
@@ -260,10 +261,10 @@ checkBtn.onclick = async () => {
         if (isOwner) {
             html += `
                 <div class="mt-4 p-3 bg-slate-800 border border-cyan-700 rounded">
-                    <p class="text-cyan-400 font-bold text-sm mb-2">ADMIN CONTROLS</p>
+                    <p class="text-cyan-400 font-bold text-sm mb-2">ADMIN CONTROLS (Owner Only)</p>
                     <div class="flex gap-2">
-                        <input id="new-sub-id" type="text" placeholder="New Sub ID" class="bg-slate-900 border border-slate-600 text-white p-2 rounded w-full text-xs font-mono" value="${detectedSubId}">
-                        <button id="update-config-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">UPDATE</button>
+                        <input id="new-sub-id" type="text" placeholder="New Subscription ID" class="bg-slate-900 border border-slate-600 text-white p-2 rounded w-full text-xs font-mono" value="${detectedSubId}">
+                        <button id="update-config-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">UPDATE ID</button>
                     </div>
                 </div>
             `;
@@ -277,13 +278,13 @@ checkBtn.onclick = async () => {
                 const newId = document.getElementById('new-sub-id').value;
                 if (!newId) return;
                 try {
-                    setLoading(true, "UPDATING...");
+                    setLoading(true, "UPDATING CONFIG...");
                     const tx = await contract.setNetworkConfig(newId, 500000, currentKeyHash);
                     await tx.wait();
-                    alert("✅ Updated!");
+                    alert("✅ Configuration Updated! Please refresh diagnostic panel.");
                     debugModal.classList.add('hidden');
                 } catch(e) {
-                    alert("Fail: " + e.message);
+                    alert("Update Failed: " + e.message);
                 }
                 setLoading(false);
             };
@@ -317,9 +318,9 @@ drawBtn.onclick = async () => {
         let errorMsg = e.reason || e.message || "Unknown Error";
         
         if (errorMsg.includes("execution reverted") || errorMsg.includes("CALL_EXCEPTION")) {
-            errorMsg = "❌ DRAW FAILED\n\n" + 
-                       "Reason: The contract address (" + CONTRACT_ADDRESS.slice(0,6) + "...) is NOT added as a Consumer in Chainlink Dashboard.\n" +
-                       "Fix: Go to Chainlink > Subscription > Add Consumer.";
+            errorMsg = "❌ DRAW FAILED (VRF REVERTED)\n\n" + 
+                       "Most Likely Cause: This specific CONTRACT ADDRESS is not added as a Consumer in Chainlink.\n" +
+                       "Action: Open Diagnostic Panel -> Copy 'Current Contract Address' -> Add to Chainlink Subscription.";
         }
         alert(errorMsg);
     }
