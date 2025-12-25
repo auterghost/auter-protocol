@@ -1,227 +1,218 @@
-// ✅ V8.0 最終完成版：真實區塊鏈數據讀取 + 反向樂透邏輯
-// ⚠️ 請在此處填入你剛才部署的 V8 合約地址
-const CONTRACT_ADDRESS = "0xdb3f99E81ef7a55FB5d09927A871E12377193E5b"; 
+import { ethers } from "ethers";
 
-const abi = [
-    "function ticketPrice() view returns (uint256)",
-    "function buyTicket(bytes _encryptedChoices) external payable",
-    "function pendingWinnings(address) view returns (uint256)",
-    "function claimPrize() external",
-    "function performUpkeep(string) external",
-    "function isMarketOpen() view returns (bool)",
-    "function getAllBets() view returns (address[], bytes[])"
+// --- CONFIGURATION ---
+// ⚠️ PASTE YOUR DEPLOYED CONTRACT ADDRESS HERE
+const CONTRACT_ADDRESS = ""; 
+
+const CHAIN_ID = 137; // Polygon Mainnet
+const TICKET_PRICE = ethers.parseEther("1.0");
+
+// --- ABI ---
+const ABI = [
+  "function buyTicket(bytes calldata _encryptedChoices) external payable",
+  "function getPlayerCount() view returns (uint256)",
+  "function pendingWinnings(address) view returns (uint256)",
+  "function claimPrize() external",
+  "function performUpkeep(string calldata source) external",
+  "event TicketPurchased(address indexed player, bytes choices, uint256 timestamp)"
 ];
 
-let provider, signer, contract;
-let price = 0;
-let userAddress = "";
-let selectedNumbers = []; 
+// --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
+const CHAINLINK_SOURCE = `
+const { ethers } = await import("npm:ethers@6.10.0");
+const contractAddress = args[0];
+const data = "0x4d588439"; 
+const response = await Functions.makeEthereumCall({ to: contractAddress, data: data });
+if (response.error) throw Error("Call Failed");
+const [players, rawBets] = ethers.AbiCoder.defaultAbiCoder().decode(["address[]", "bytes[]"], response.returnData);
+if (players.length === 0) return Functions.encodeUint256(0);
+const counts = {}; const playerBets = [];
+for (let i = 0; i < rawBets.length; i++) {
+    const hex = rawBets[i].slice(2);
+    let str = "";
+    for (let n = 0; n < hex.length; n += 2) str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
+    const coords = str.split(",");
+    playerBets.push({ id: i, bets: coords });
+    coords.forEach(c => counts[c] = (counts[c] || 0) + 1);
+}
+let bestScore = 999999; let winnerIndex = 0;
+for (let i = 0; i < playerBets.length; i++) {
+    let score = 0;
+    playerBets[i].bets.forEach(c => score += counts[c] || 0);
+    if (score < bestScore) { bestScore = score; winnerIndex = i; }
+}
+return Functions.encodeUint256(winnerIndex);
+`;
 
-if (window.ethereum) {
-    window.ethereum.on('accountsChanged', function (accounts) {
-        window.location.reload();
-    });
+// --- STATE ---
+let provider, signer, contract;
+let currentSelection = [];
+let walletAddress = null;
+
+// --- DOM ELEMENTS ---
+const connectBtn = document.getElementById('connect-btn');
+const walletInfo = document.getElementById('wallet-info');
+const gameUI = document.getElementById('game-ui');
+const gridContainer = document.getElementById('grid-container');
+const selectionCount = document.getElementById('selection-count');
+const buyBtn = document.getElementById('buy-btn');
+const clearBtn = document.getElementById('clear-btn');
+const loadingOverlay = document.getElementById('loading-overlay');
+const loadingText = document.getElementById('loading-text');
+
+// --- INITIALIZATION ---
+function initGrid() {
+    gridContainer.innerHTML = '';
+    for (let i = 1; i <= 49; i++) {
+        const btn = document.createElement('button');
+        btn.className = `h-10 w-10 sm:h-12 sm:w-12 rounded-full flex items-center justify-center font-bold text-lg transition-all duration-300 bg-slate-800 text-slate-400 hover:bg-slate-700`;
+        btn.innerText = i;
+        btn.onclick = () => toggleNumber(i, btn);
+        gridContainer.appendChild(btn);
+    }
 }
 
-window.onload = function() {
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
-    const container = document.getElementById('gridContainer');
-    rows.forEach(r => {
-        for (let c = 1; c <= 7; c++) {
-            const coord = r + c;
-            const btn = document.createElement('div');
-            btn.className = 'grid-btn';
-            btn.innerText = coord;
-            btn.onclick = () => toggleSelection(btn, coord);
-            container.appendChild(btn);
+function toggleNumber(num, btn) {
+    if (currentSelection.includes(num)) {
+        currentSelection = currentSelection.filter(n => n !== num);
+        btn.classList.remove('selected-ball');
+    } else {
+        if (currentSelection.length < 6) {
+            currentSelection.push(num);
+            btn.classList.add('selected-ball');
         }
-    });
+    }
+    updateUI();
+}
+
+function updateUI() {
+    selectionCount.innerText = `${currentSelection.length}/6`;
+    selectionCount.classList.toggle('text-green-400', currentSelection.length === 6);
+    buyBtn.disabled = currentSelection.length !== 6;
+}
+
+// --- WEB3 FUNCTIONS ---
+async function connectWallet() {
+    if (!window.ethereum) return alert("Install MetaMask!");
+    try {
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = await provider.getSigner();
+        walletAddress = await signer.getAddress();
+
+        // Switch Chain
+        const net = await provider.getNetwork();
+        if (Number(net.chainId) !== CHAIN_ID) {
+            try {
+                await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] });
+            } catch (e) {
+                alert("Please switch to Polygon Mainnet to play.");
+                return;
+            }
+        }
+
+        // Setup Contract
+        if (CONTRACT_ADDRESS && CONTRACT_ADDRESS.length > 0) {
+            contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+            refreshData();
+        }
+
+        // Update UI
+        connectBtn.classList.add('hidden');
+        walletInfo.classList.remove('hidden');
+        gameUI.classList.remove('hidden');
+        document.getElementById('address-display').innerText = `${walletAddress.slice(0,6)}...${walletAddress.slice(-4)}`;
+        
+        const bal = await provider.getBalance(walletAddress);
+        document.getElementById('balance-display').innerText = `${ethers.formatEther(bal).slice(0,5)} POL`;
+
+    } catch (e) {
+        console.error("Wallet connection failed");
+    }
+}
+
+async function refreshData() {
+    if (!contract) return;
+    try {
+        const players = await contract.getPlayerCount();
+        document.getElementById('player-count').innerText = players;
+        
+        const balance = await provider.getBalance(CONTRACT_ADDRESS);
+        document.getElementById('pool-size').innerText = ethers.formatEther(balance);
+
+        const winnings = await contract.pendingWinnings(walletAddress);
+        const winEth = ethers.formatEther(winnings);
+        document.getElementById('my-winnings').innerText = `${winEth} POL`;
+        
+        if (Number(winEth) > 0) {
+            const btn = document.getElementById('claim-btn');
+            btn.classList.remove('hidden');
+            btn.onclick = async () => {
+                setLoading(true, "CLAIMING PRIZE...");
+                try {
+                    const tx = await contract.claimPrize();
+                    await tx.wait();
+                    alert("Prize Claimed Successfully!");
+                    refreshData();
+                } catch(e) {
+                    alert("Claim failed");
+                }
+                setLoading(false);
+            };
+        }
+    } catch(e) { 
+        // Silent fail for refresh data to avoid console spam in production
+    }
+}
+
+// --- ACTIONS ---
+buyBtn.onclick = async () => {
+    if (!contract) return alert("Contract address not set");
+    setLoading(true, "MINTING TICKET...");
+    try {
+        const coords = currentSelection.map(num => {
+            const row = String.fromCharCode(65 + Math.floor((num - 1) / 7));
+            const col = ((num - 1) % 7) + 1;
+            return `${row}${col}`;
+        }).join(",");
+        
+        const bytes = ethers.toUtf8Bytes(coords);
+        const tx = await contract.buyTicket(bytes, { value: TICKET_PRICE });
+        await tx.wait();
+        alert(`Ticket Minted! Coordinates: ${coords}`);
+        currentSelection = [];
+        initGrid(); 
+        updateUI();
+        refreshData();
+    } catch (e) {
+        alert("Transaction Failed: " + (e.reason || "Unknown Error"));
+    }
+    setLoading(false);
 };
 
-function toggleSelection(btn, coord) {
-    if (selectedNumbers.includes(coord)) {
-        selectedNumbers = selectedNumbers.filter(n => n !== coord);
-        btn.classList.remove('selected');
-    } else {
-        if (selectedNumbers.length >= 6) {
-            alert("最多只能選擇 6 個號碼！");
-            return;
-        }
-        selectedNumbers.push(coord);
-        btn.classList.add('selected');
-    }
-    updateSelectionUI();
-}
-
-function updateSelectionUI() {
-    document.getElementById('selectedCount').innerText = selectedNumbers.length;
-    document.getElementById('selectedCoords').innerText = selectedNumbers.length > 0 ? selectedNumbers.join(", ") : "(尚未選擇)";
-    
-    const buyBtn = document.getElementById('btnBuy');
-    if (contract && selectedNumbers.length === 6) {
-        buyBtn.disabled = false;
-        buyBtn.innerText = `💰 購買彩券 (${selectedNumbers.length}/6)`;
-    } else {
-        buyBtn.disabled = true;
-        buyBtn.innerText = selectedNumbers.length === 6 ? "💰 請先連線錢包" : `💰 請選擇 6 個號碼 (${selectedNumbers.length}/6)`;
-    }
-}
-
-async function connectWallet() {
-    if (window.ethereum) {
-        try {
-            await window.ethereum.request({
-                method: "wallet_requestPermissions",
-                params: [{ eth_accounts: {} }]
-            });
-
-            provider = new ethers.BrowserProvider(window.ethereum);
-            signer = await provider.getSigner();
-            userAddress = await signer.getAddress();
-            
-            document.getElementById("status").innerText = "🟢 已連線: " + userAddress;
-            contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
-            
-            const priceWei = await contract.ticketPrice();
-            price = priceWei;
-            document.getElementById("priceInfo").innerText = `🎫 當前票價: ${ethers.formatEther(priceWei)} POL`;
-            
-            updateSelectionUI(); 
-            checkWinnings();
-
-        } catch (error) {
-            if (error.code !== 4001) alert("連線失敗: " + error.message);
-        }
-    } else {
-        alert("請安裝 MetaMask!");
-    }
-}
-
-async function buyTicket() {
-    if (selectedNumbers.length !== 6) return alert("請先選擇 6 個號碼！");
-    if (!contract) return alert("請先連線錢包！");
+document.getElementById('draw-btn').onclick = async () => {
+    if (!contract) return alert("Contract address not set");
+    setLoading(true, "REQUESTING RANDOMNESS...");
     try {
-        const choiceString = selectedNumbers.join(",");
-        const encryptedChoice = ethers.toUtf8Bytes(choiceString);
-        
-        document.getElementById("status").innerText = "⏳ 發送交易中...";
-        const tx = await contract.buyTicket(encryptedChoice, { value: price });
-        document.getElementById("status").innerText = "⏳ 等待打包...";
+        const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        
-        document.getElementById("status").innerText = "✅ 購票成功！";
-        alert(`購票成功！`);
-        selectedNumbers = [];
-        document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('selected'));
-        updateSelectionUI();
-    } catch (error) {
-        console.error(error);
-        document.getElementById("status").innerText = "❌ 失敗: " + error.message;
+        alert("Draw Initiated! The Oracle is calculating the winner...");
+    } catch (e) {
+        alert("Draw Failed: " + (e.reason || "Check console"));
+    }
+    setLoading(false);
+};
+
+function setLoading(active, text = "") {
+    if (active) {
+        loadingOverlay.classList.remove('hidden');
+        loadingText.innerText = text;
+    } else {
+        loadingOverlay.classList.add('hidden');
     }
 }
 
-async function checkWinnings() {
-    if (!contract) return;
-    try {
-        document.getElementById("claimStatus").innerText = "查詢中...";
-        const winnings = await contract.pendingWinnings(userAddress);
-        if (winnings > 0) {
-            const amount = ethers.formatEther(winnings);
-            document.getElementById("winMessage").innerText = `🎉 恭喜！你有 ${amount} POL 獎金！`;
-            document.getElementById("winMessage").style.display = "block";
-            document.getElementById("btnClaim").style.display = "block";
-            document.getElementById("claimStatus").innerText = "待領取";
-        } else {
-            document.getElementById("winMessage").style.display = "none";
-            document.getElementById("btnClaim").style.display = "none";
-            document.getElementById("claimStatus").innerText = "無未領獎金";
-        }
-    } catch (error) { console.error(error); }
-}
-
-async function claimPrize() {
-    if (!contract) return;
-    try {
-        document.getElementById("claimStatus").innerText = "⏳ 提領中...";
-        const tx = await contract.claimPrize();
-        await tx.wait();
-        document.getElementById("claimStatus").innerText = "✅ 提領成功！";
-        alert("獎金已入帳！");
-        checkWinnings();
-    } catch (error) {
-        console.error(error);
-        document.getElementById("claimStatus").innerText = "❌ 失敗: " + error.message;
-    }
-}
-
-// 🔥 V8.0 核心：真正的反向樂透邏輯 (Chainlink 執行)
-async function drawWinner() {
-    if (!contract) return;
-    
-    // 這段代碼會在 Chainlink 的伺服器上執行
-    const source = `
-        const contractAddress = args[0];
-        const data = "0x4d588439"; // getAllBets() selector
-
-        const response = await Functions.makeEthereumCall({
-            to: contractAddress,
-            data: data,
-        });
-
-        if (response.error) {
-            throw Error("Chainlink Call Failed");
-        }
-
-        const returnType = ["address[]", "bytes[]"];
-        const decoded = ethers.utils.defaultAbiCoder.decode(returnType, response.returnData);
-        const players = decoded[0];
-        const rawBets = decoded[1];
-
-        const counts = {};
-        const playerBets = [];
-
-        for (let i = 0; i < rawBets.length; i++) {
-            const hex = rawBets[i].slice(2);
-            let str = "";
-            for (let n = 0; n < hex.length; n += 2) {
-                str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
-            }
-            
-            const coords = str.split(",");
-            playerBets.push({ playerIndex: i, bets: coords });
-
-            coords.forEach(c => {
-                counts[c] = (counts[c] || 0) + 1;
-            });
-        }
-
-        let bestScore = 999999;
-        let winnerIndex = 0;
-
-        for (let i = 0; i < playerBets.length; i++) {
-            let score = 0;
-            playerBets[i].bets.forEach(c => {
-                score += counts[c];
-            });
-
-            if (score < bestScore) {
-                bestScore = score;
-                winnerIndex = i;
-            }
-        }
-
-        return Functions.encodeUint256(winnerIndex);
-    `;
-    
-    try {
-        const tx = await contract.performUpkeep(source, { gasLimit: 1000000 });
-        
-        document.getElementById("status").innerText = "⏳ V8 真實開獎請求已發送...";
-        await tx.wait();
-        
-        alert("開獎請求已發送！\nChainlink 正在讀取鏈上數據並計算最獨特的贏家。\n請稍待 2 分鐘後檢查。");
-    } catch (error) {
-        console.error(error);
-        alert("開獎失敗: " + error.message);
-    }
-}
+// --- BOOTSTRAP ---
+connectBtn.onclick = connectWallet;
+clearBtn.onclick = () => { currentSelection = []; initGrid(); updateUI(); };
+initGrid();
