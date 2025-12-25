@@ -1,7 +1,8 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 請確認這裡是你已經部署的 V9 合約地址
+// ⚠️ 請再次確認這裡是你 Remix 部署後的 "V9" 合約地址
+// 如果填成錢包地址或舊地址，開獎會失敗 (回傳 0x)
 const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f";
 const CHAIN_ID = 178; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
@@ -18,16 +19,16 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ V9.4 終極修正：多重節點輪替機制 (Multi-RPC Failover)
-// 既然單一 RPC 容易失敗，我們就準備 5 個備用節點，一個接一個試，直到成功為止。
+// ⚠️ V9.5 修正：空值過濾與深度驗證
+// 解決 "Invalid count parsed" 問題 (當 RPC 回傳 "0x" 時自動跳過)
 const CHAINLINK_SOURCE = `
-// 定義 RPC 候選名單 (優先順序排列)
+// 定義 RPC 候選名單
 const rpcList = [
-    "https://polygon-bor-rpc.publicnode.com", // 通常最快
-    "https://rpc.ankr.com/polygon",           // 很穩定
-    "https://polygon-rpc.com",                // 官方聚合器
-    "https://1rpc.io/matic",                  // 隱私節點
-    "https://matic-mainnet.chainstacklabs.com" // 備用
+    "https://polygon-bor-rpc.publicnode.com", 
+    "https://rpc.ankr.com/polygon",           
+    "https://polygon-rpc.com",                
+    "https://1rpc.io/matic",                  
+    "https://matic-mainnet.chainstacklabs.com" 
 ];
 
 const contractAddress = args[0];
@@ -47,19 +48,26 @@ async function tryRpc(url) {
                 params: [{ to: contractAddress, data: data }, "latest"],
                 id: 1
             },
-            timeout: 5000 // 5秒超時設定
+            timeout: 5000
         });
         
         const response = await request;
         
-        // 嚴格檢查：如果有錯或回傳空值，拋出錯誤讓外層 catch 捕獲
         if (response.error) throw new Error("Connection Failed");
-        if (!response.data || !response.data.result) throw new Error("Invalid Data (likely HTML)");
+        if (!response.data || !response.data.result) throw new Error("No Result");
         
-        return response.data.result;
+        const res = response.data.result;
+
+        // --- V9.5 關鍵修正 ---
+        // 如果回傳 "0x" (空值)，代表讀不到合約數據，視為失敗，強制換下一個節點
+        if (res === "0x" || res.length < 10) {
+            throw new Error("Empty Response (0x) - Possible Invalid Contract Address");
+        }
+        
+        return res;
     } catch (e) {
         console.log("RPC Failed:", e.message);
-        return null; // 回傳 null 表示這個節點失敗
+        return null;
     }
 }
 
@@ -68,11 +76,12 @@ let hexCount = null;
 
 for (let i = 0; i < rpcList.length; i++) {
     hexCount = await tryRpc(rpcList[i]);
-    if (hexCount) break; // 如果成功拿到數據，跳出迴圈
+    if (hexCount) break; 
 }
 
 if (!hexCount) {
-    throw Error("All RPCs failed. Please try again later.");
+    // 如果全部失敗，很有可能是合約地址填錯了
+    throw Error("All RPCs failed. Please CHECK CONTRACT ADDRESS in script.js");
 }
 
 // 解析數據
@@ -80,7 +89,7 @@ const count = parseInt(hexCount, 16);
 console.log("Final Player Count:", count);
 
 if (isNaN(count)) {
-  throw Error("Invalid count parsed");
+  throw Error("Parsed NaN from hex: " + hexCount);
 }
 
 if (count === 0) {
@@ -249,10 +258,10 @@ document.getElementById('draw-btn').onclick = async () => {
     if (!contract) return alert("Contract address not set in script.js");
     setLoading(true, "REQUESTING RANDOMNESS (MULTI-RPC MODE)...");
     try {
-        // V9.4: 使用新的多重節點輪替腳本
+        // V9.5: 嚴格版多重節點腳本
         const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        alert("Draw Initiated! Oracle is cycling through RPCs to find a stable connection (Wait ~1-2 min)...");
+        alert("Draw Initiated! Oracle is checking nodes for valid data (Wait ~1-2 min)...");
     } catch (e) {
         alert("Draw Failed: " + (e.reason || "Check console"));
     }
