@@ -47,7 +47,7 @@
                 <div>
                     <h1 class="text-3xl font-bold brand-font text-white">AUTER ARK</h1>
                     <div class="flex items-center gap-2">
-                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V14.0 DIAGNOSTIC</p>
+                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V16.0 SYSTEM STABLE</p>
                     </div>
                 </div>
             </div>
@@ -142,7 +142,7 @@
                 <button id="close-debug" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
                 
                 <h2 class="text-2xl font-bold brand-font text-white mb-6 flex items-center gap-2">
-                    <span class="text-yellow-500">⚠</span> SYSTEM DIAGNOSTIC
+                    <span class="text-yellow-500">⚠</span> SYSTEM DIAGNOSTIC (V16)
                 </h2>
 
                 <div id="debug-content" class="space-y-4 font-mono text-sm text-slate-300">
@@ -150,11 +150,11 @@
                 </div>
 
                 <div class="mt-8 pt-6 border-t border-slate-800">
-                    <h3 class="text-white font-bold mb-2">DEBUG CHECKLIST (MUST DO):</h3>
+                    <h3 class="text-white font-bold mb-2">DEBUG CHECKLIST:</h3>
                     <ol class="list-decimal pl-5 space-y-2 text-slate-400">
-                        <li>Is <strong>Subscription ID</strong> detected above same as your Chainlink ID?</li>
-                        <li>Is <strong>Contract Balance</strong> > 0 (Did you buy a ticket)?</li>
-                        <li>Click the <span class="text-cyan-400">CHAINLINK PANEL</span> link below. Does "Consumers" list the Contract Address shown above?</li>
+                        <li>Did you add the <strong>Contract Address</strong> to Chainlink Consumers?</li>
+                        <li>Does Subscription ID match?</li>
+                        <li>Is Balance > 0?</li>
                     </ol>
                 </div>
                 
@@ -168,6 +168,34 @@
                 </div>
             </div>
         </div>
+
+        <!-- WINNER MODAL -->
+        <div id="winner-modal" class="hidden fixed inset-0 z-[60] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 transition-opacity duration-500">
+            <div class="bg-gradient-to-b from-yellow-900/40 to-slate-900 border border-yellow-600/50 rounded-2xl w-full max-w-md p-8 text-center shadow-[0_0_50px_rgba(234,179,8,0.3)] relative overflow-hidden transform scale-100 transition-transform duration-300">
+                <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 animate-pulse"></div>
+                
+                <div class="relative z-10">
+                    <div class="text-6xl mb-4 animate-bounce">🏆</div>
+                    <h2 class="text-3xl font-black brand-font text-white mb-2 tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600">JACKPOT!</h2>
+                    <p class="text-slate-400 text-sm mb-6">WINNING NUMBER GENERATED ON CHAIN</p>
+                    
+                    <div class="bg-black/40 p-4 rounded-xl border border-yellow-900/50 mb-6">
+                        <p class="text-xs text-yellow-500 uppercase tracking-widest mb-1">Winner Address</p>
+                        <p id="winner-address" class="text-white font-mono text-lg break-all">0x00...0000</p>
+                    </div>
+
+                    <div class="bg-gradient-to-r from-yellow-900/20 to-amber-900/20 p-4 rounded-xl border border-yellow-600/30 mb-8">
+                        <p class="text-xs text-yellow-500 uppercase tracking-widest mb-1">Prize Won</p>
+                        <p id="winner-prize" class="text-3xl font-bold text-white font-mono">0.0 POL</p>
+                    </div>
+
+                    <button id="close-winner" class="w-full bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-500 hover:to-amber-500 text-black font-bold py-4 rounded-xl shadow-lg transition-all transform hover:scale-105 brand-font">
+                        CONTINUE
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script type="module" src="script.js"></script>
