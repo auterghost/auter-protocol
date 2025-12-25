@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
 // ⚠️ 請務必填入您剛剛部署的 V16 合約地址
-const CONTRACT_ADDRESS = ""; 
+const CONTRACT_ADDRESS = "0xd10a40aA76eeE84C581E5006030fFf3cde15086A"; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
