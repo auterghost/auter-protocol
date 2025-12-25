@@ -19,10 +19,11 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ FIX: Robust RPC handling + Deterministic Winner Selection + BigInt casting
+// ⚠️ FIX: Switched to polygon-rpc.com to avoid "Response is too large" HTML errors
 const CHAINLINK_SOURCE = `
-// 1. 設定 Polygon 主網 RPC
-const rpcUrl = "https://polygon-bor-rpc.publicnode.com";
+// 1. 設定 Polygon 主網 RPC (使用聚合器以提高穩定性)
+const rpcUrl = "https://polygon-rpc.com";
+
 const contractAddress = args[0];
 const data = "0x5d62d910"; // getPlayerCount() selector
 
@@ -39,17 +40,19 @@ const request = Functions.makeHttpRequest({
   }
 });
 
+// 3. 等待回應
 const response = await request;
 
-// 3. 錯誤處理與數據驗證
+// 4. 錯誤處理
 if (response.error) {
   throw Error("RPC Request Failed");
 }
+// 這裡增加檢查，確保沒有回傳空值或 HTML 錯誤
 if (!response.data || !response.data.result) {
   throw Error("Invalid RPC Response: " + JSON.stringify(response));
 }
 
-// 4. 解析玩家人數
+// 5. 解析玩家人數
 const hexCount = response.data.result;
 const count = parseInt(hexCount, 16);
 console.log("Player Count:", count);
@@ -58,16 +61,14 @@ if (isNaN(count) || count === 0) {
   throw Error("No players or invalid count data");
 }
 
-// 5. 決定贏家 (使用確定性算法以避免 Consensus Error)
-// 注意：Math.random() 在去中心化網路中會導致節點結果不一致而失敗
-// 這裡我們使用簡單的確定性算法 (基於人數的偽隨機) 來確保所有節點達成共識
-// 在這個版本中，我們選取最後一位加入的玩家作為贏家，或者使用簡單的模運算
+// 6. 決定贏家 (為了通過 Chainlink 共識，暫時使用確定性算法)
+// V10 我們會升級成 VRF 或 Commit-Reveal
 const seed = count * 997 + 123; 
 const winnerIndex = seed % count;
 
 console.log("Winner Index:", winnerIndex);
 
-// 6. 回傳結果 (強制轉為 BigInt 以修復 'not an integer' 錯誤)
+// 7. 回傳結果 (BigInt 修正已保留)
 return Functions.encodeUint256(BigInt(winnerIndex));
 `;
 
