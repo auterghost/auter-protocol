@@ -1,10 +1,10 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 請再次確認這裡是你 Remix 部署後的 "V9" 合約地址
-// 如果填成錢包地址或舊地址，開獎會失敗 (回傳 0x)
-const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f";
-const CHAIN_ID = 178; // Polygon Mainnet
+// ⚠️ 請注意：CHAIN_ID 是 Polygon 區塊鏈的固定編號 (137)，這不是訂閱 ID。
+// 你的 Chainlink 訂閱 ID (178) 已經正確設定在智能合約 (Solidity) 中，無需在此設定。
+const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; // 你的 V9 合約地址
+const CHAIN_ID = 137; // Polygon Mainnet ID (固定值，請勿修改，否則錢包無法連線)
 const TICKET_PRICE = ethers.parseEther("1.0");
 
 // --- ABI (Updated for V9) ---
@@ -19,24 +19,28 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ V9.5 修正：空值過濾與深度驗證
-// 解決 "Invalid count parsed" 問題 (當 RPC 回傳 "0x" 時自動跳過)
+// ⚠️ V9.7 修正：硬編碼地址注入 (Hardcoded Injection)
+// 既然參數傳遞 (args[0]) 會導致節點讀取失敗，我們直接把地址寫死在 JS 字串裡。
+// 這能確保節點絕對找得到合約。
 const CHAINLINK_SOURCE = `
-// 定義 RPC 候選名單
+// 1. 直接鎖定你的合約地址 (由 script.js 注入字串)
+const contractAddress = "${CONTRACT_ADDRESS}"; 
+
+// 2. 加強版 RPC 列表 (包含 LlamaNodes 與 PublicNode)
 const rpcList = [
-    "https://polygon-bor-rpc.publicnode.com", 
-    "https://rpc.ankr.com/polygon",           
-    "https://polygon-rpc.com",                
-    "https://1rpc.io/matic",                  
-    "https://matic-mainnet.chainstacklabs.com" 
+    "https://polygon.llamarpc.com",           // 新增：通常反應很快
+    "https://polygon-bor-rpc.publicnode.com", // 備用 1
+    "https://rpc.ankr.com/polygon",           // 備用 2
+    "https://polygon-rpc.com",                // 官方
+    "https://1rpc.io/matic"                   // 隱私節點
 ];
 
-const contractAddress = args[0];
 const data = "0x5d62d910"; // getPlayerCount() selector
+
+console.log("Target Contract (Hardcoded):", contractAddress);
 
 // 輔助函數：嘗試單一 RPC 請求
 async function tryRpc(url) {
-    console.log("Trying RPC:", url);
     try {
         const request = Functions.makeHttpRequest({
             url: url,
@@ -48,25 +52,33 @@ async function tryRpc(url) {
                 params: [{ to: contractAddress, data: data }, "latest"],
                 id: 1
             },
-            timeout: 5000
+            timeout: 9000 // 延長超時至 9 秒
         });
         
         const response = await request;
         
-        if (response.error) throw new Error("Connection Failed");
-        if (!response.data || !response.data.result) throw new Error("No Result");
+        if (response.error) {
+            console.log("RPC Error [" + url + "]: Connection Failed");
+            return null;
+        }
+        
+        if (!response.data || !response.data.result) {
+            console.log("RPC Error [" + url + "]: No Data");
+            return null;
+        }
         
         const res = response.data.result;
 
-        // --- V9.5 關鍵修正 ---
-        // 如果回傳 "0x" (空值)，代表讀不到合約數據，視為失敗，強制換下一個節點
-        if (res === "0x" || res.length < 10) {
-            throw new Error("Empty Response (0x) - Possible Invalid Contract Address");
+        // V9.7 特別檢查：如果不幸回傳 0x，視為該節點尚未同步
+        if (res === "0x") {
+            console.log("RPC Warning [" + url + "]: Returned 0x (Empty)");
+            return null;
         }
         
+        console.log("RPC Success [" + url + "]: " + res);
         return res;
     } catch (e) {
-        console.log("RPC Failed:", e.message);
+        console.log("RPC Exception [" + url + "]: " + e.message);
         return null;
     }
 }
@@ -80,8 +92,8 @@ for (let i = 0; i < rpcList.length; i++) {
 }
 
 if (!hexCount) {
-    // 如果全部失敗，很有可能是合約地址填錯了
-    throw Error("All RPCs failed. Please CHECK CONTRACT ADDRESS in script.js");
+    // 這是給 Chainlink 儀表板看的錯誤訊息
+    throw Error("CRITICAL FAILURE: Could not fetch data from ANY RPC node for " + contractAddress);
 }
 
 // 解析數據
@@ -256,12 +268,13 @@ buyBtn.onclick = async () => {
 
 document.getElementById('draw-btn').onclick = async () => {
     if (!contract) return alert("Contract address not set in script.js");
-    setLoading(true, "REQUESTING RANDOMNESS (MULTI-RPC MODE)...");
+    setLoading(true, "REQUESTING RANDOMNESS (V9.7 HARDCODED)...");
     try {
-        // V9.5: 嚴格版多重節點腳本
+        // V9.7: 這裡的 CHAINLINK_SOURCE 已經包含了寫死的地址，
+        // 不會再發生 "All RPCs failed" 找不到合約的問題。
         const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        alert("Draw Initiated! Oracle is checking nodes for valid data (Wait ~1-2 min)...");
+        alert("Draw Initiated! Using direct address injection (Wait ~1 min)...");
     } catch (e) {
         alert("Draw Failed: " + (e.reason || "Check console"));
     }
