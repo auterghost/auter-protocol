@@ -1,12 +1,10 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-const CONTRACT_ADDRESS = "0x01b1e5424C982d8209679DA404ff3247ed9687B5"; 
+// ⚠️ 請在部署新合約後，將新地址貼在下方引號中
+const CONTRACT_ADDRESS = "0x321e27289Ee4368DF0Ea1944f0045496D2088dCc"; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
-
-// 這是您截圖中正確的 Chainlink VRF Subscription ID
-const CORRECT_SUB_ID = "91085056963050045204976540555110204657705201567062698051797821556862941861279";
 
 // --- ABI ---
 const ABI = [
@@ -19,8 +17,6 @@ const ABI = [
   "function emergencyWithdraw() external",
   "function setMarketStatus(bool _isOpen) external",
   "function isMarketOpen() view returns (bool)",
-  "function s_subscriptionId() view returns (uint256)", // 读取合約內的 SubID
-  "function setChainlinkConfig(uint256 _subId, uint32 _gasLimit, bytes32 _keyHash) external", // 修復用
   // Events
   "event TicketPurchased(address indexed player)", 
   "event WinnerPicked(address indexed winner, uint256 prize, uint256 fee, uint256 randomValue)"
@@ -96,8 +92,9 @@ async function connectWallet() {
         if (CONTRACT_ADDRESS && CONTRACT_ADDRESS.length > 10) {
             contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
             refreshData();
-            checkConfigDiagnostic(); // 執行診斷
             setupEvents();
+        } else {
+            console.warn("Contract address not set");
         }
 
         connectBtn.classList.add('hidden');
@@ -110,57 +107,6 @@ async function connectWallet() {
     } catch (e) {
         console.error("Wallet connection failed", e);
     }
-}
-
-// --- DIAGNOSTIC TOOL (AUTO FIXER) ---
-async function checkConfigDiagnostic() {
-    try {
-        console.log("Running diagnostics...");
-        // 1. 檢查 Sub ID
-        const currentSubId = await contract.s_subscriptionId();
-        const currentIdStr = currentSubId.toString();
-        
-        console.log(`On-Chain ID: ${currentIdStr}`);
-        console.log(`Correct ID:  ${CORRECT_SUB_ID}`);
-
-        if (currentIdStr !== CORRECT_SUB_ID) {
-            drawBtn.classList.add('hidden'); // 隱藏開獎按鈕
-            
-            // 創建修復按鈕
-            const fixBtn = document.createElement('button');
-            fixBtn.id = "fix-btn";
-            fixBtn.className = "w-full bg-red-600 hover:bg-red-500 text-white py-4 rounded-xl font-bold tracking-widest border border-red-400 animate-pulse mb-2";
-            fixBtn.innerHTML = `⚠️ CONFIG MISMATCH DETECTED<br><span class="text-xs">CLICK TO FIX SUBSCRIPTION ID</span>`;
-            fixBtn.onclick = fixConfiguration;
-            
-            drawBtn.parentNode.insertBefore(fixBtn, drawBtn);
-            alert("⚠️ 檢測到設定錯誤：合約內的訂閱 ID 與 Chainlink 不符。\n請點擊紅色的 'FIX' 按鈕進行修復，修復後即可開獎。");
-        } else {
-            console.log("Config is CORRECT ✅");
-        }
-    } catch (e) {
-        console.warn("Diagnostic failed:", e);
-    }
-}
-
-async function fixConfiguration() {
-    setLoading(true, "FIXING CONFIG...");
-    try {
-        // VRF V2.5 KeyHash (Polygon Mainnet - 1000 gwei lane)
-        const keyHash = "0x719e78216d7a488f7808298782a22235948f95c010b490f05560b457b0784d86";
-        const gasLimit = 300000;
-        
-        // 呼叫管理員功能更新 ID
-        const tx = await contract.setChainlinkConfig(CORRECT_SUB_ID, gasLimit, keyHash);
-        await tx.wait();
-        
-        alert("Config Fixed! You can now draw.");
-        document.getElementById('fix-btn').remove();
-        drawBtn.classList.remove('hidden');
-    } catch (e) {
-        alert("Fix failed: " + (e.reason || e.message));
-    }
-    setLoading(false);
 }
 
 function setupEvents() {
@@ -210,7 +156,7 @@ async function refreshData() {
 
 // --- ACTIONS ---
 buyBtn.onclick = async () => {
-    if (!contract) return alert("Contract address missing in script.js");
+    if (!contract || CONTRACT_ADDRESS.length < 10) return alert("Contract address missing! Please update script.js");
     setLoading(true, "MINTING TICKET...");
     try {
         const isOpen = await contract.isMarketOpen();
@@ -237,9 +183,8 @@ buyBtn.onclick = async () => {
 };
 
 drawBtn.onclick = async () => {
-    if (!contract) return alert("Contract address missing in script.js");
+    if (!contract || CONTRACT_ADDRESS.length < 10) return alert("Contract address missing! Please update script.js");
     
-    // Safety Check: Ensure there are players
     try {
         const players = await contract.getPlayerCount();
         if (Number(players) === 0) return alert("❌ No players in the pool. Cannot draw.");
@@ -247,15 +192,19 @@ drawBtn.onclick = async () => {
 
     setLoading(true, "REQUESTING VRF RANDOMNESS...");
     try {
-        // Manually set Gas Limit to prevent RPC estimation errors on Polygon
+        // Gas Limit set to 500k for safe execution
         const tx = await contract.pickWinner({ gasLimit: 500000 });
         await tx.wait();
         alert("✅ Randomness Requested! \nWait ~30-60s for Chainlink VRF V2.5 callback.\nThe winner will appear automatically.");
     } catch (e) {
         console.error("Draw Error:", e);
         let errorMsg = e.reason || e.message || "Unknown Error";
-        if(errorMsg.includes("user rejected")) errorMsg = "Transaction Rejected by User";
-        alert("Draw Failed: " + errorMsg);
+        if(errorMsg.includes("user rejected")) {
+            errorMsg = "Transaction Rejected by User";
+        } else if (errorMsg.includes("execution reverted")) {
+            errorMsg = "Transaction Reverted! \n\nCHECKLIST:\n1. Is 'AuterArkV10_Production' contract added to Chainlink Consumers?\n2. Does Subscription have LINK?";
+        }
+        alert("Draw Failed: \n" + errorMsg);
     }
     setLoading(false);
 };
