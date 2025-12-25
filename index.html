@@ -16,7 +16,6 @@
         .brand-font { font-family: 'Orbitron', sans-serif; }
         .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
         .selected-ball { background-color: #06b6d4; color: black; box-shadow: 0 0 15px rgba(6,182,212,0.6); transform: scale(1.1); }
-        /* Scrollbar for modal */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
@@ -47,7 +46,7 @@
                 <div>
                     <h1 class="text-3xl font-bold brand-font text-white">AUTER ARK</h1>
                     <div class="flex items-center gap-2">
-                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V16.0 SYSTEM STABLE</p>
+                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V16.3 DIAGNOSTIC</p>
                     </div>
                 </div>
             </div>
@@ -128,7 +127,6 @@
             </div>
         </div>
         
-        <!-- Loading Overlay -->
         <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center">
              <div class="text-center">
                  <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-6 shadow-[0_0_30px_rgba(6,182,212,0.3)]"></div>
@@ -136,13 +134,12 @@
              </div>
         </div>
 
-        <!-- DIAGNOSTIC MODAL -->
         <div id="debug-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
             <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
                 <button id="close-debug" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
                 
                 <h2 class="text-2xl font-bold brand-font text-white mb-6 flex items-center gap-2">
-                    <span class="text-yellow-500">⚠</span> SYSTEM DIAGNOSTIC (V16)
+                    <span class="text-yellow-500">⚠</span> SYSTEM DIAGNOSTIC
                 </h2>
 
                 <div id="debug-content" class="space-y-4 font-mono text-sm text-slate-300">
@@ -150,11 +147,11 @@
                 </div>
 
                 <div class="mt-8 pt-6 border-t border-slate-800">
-                    <h3 class="text-white font-bold mb-2">DEBUG CHECKLIST:</h3>
+                    <h3 class="text-white font-bold mb-2">DEBUG CHECKLIST (MUST DO):</h3>
                     <ol class="list-decimal pl-5 space-y-2 text-slate-400">
-                        <li>Did you add the <strong>Contract Address</strong> to Chainlink Consumers?</li>
-                        <li>Does Subscription ID match?</li>
-                        <li>Is Balance > 0?</li>
+                        <li>Is <strong>Subscription ID</strong> detected above same as your Chainlink ID?</li>
+                        <li>Is <strong>Contract Balance</strong> > 0 (Did you buy a ticket)?</li>
+                        <li>Click the <span class="text-cyan-400">CHAINLINK PANEL</span> link below. Does "Consumers" list the Contract Address shown above?</li>
                     </ol>
                 </div>
                 
@@ -169,7 +166,6 @@
             </div>
         </div>
 
-        <!-- WINNER MODAL -->
         <div id="winner-modal" class="hidden fixed inset-0 z-[60] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 transition-opacity duration-500">
             <div class="bg-gradient-to-b from-yellow-900/40 to-slate-900 border border-yellow-600/50 rounded-2xl w-full max-w-md p-8 text-center shadow-[0_0_50px_rgba(234,179,8,0.3)] relative overflow-hidden transform scale-100 transition-transform duration-300">
                 <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 animate-pulse"></div>
