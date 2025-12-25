@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
 // ⚠️ PASTE YOUR DEPLOYED V9 CONTRACT ADDRESS HERE AFTER DEPLOYMENT
-const CONTRACT_ADDRESS = ""; 
+const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; 
 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
