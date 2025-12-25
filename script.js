@@ -18,62 +18,81 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ V9.3 重大修正：
-// 1. 棄用 polygon-rpc.com (因為會回傳 HTML 導致 Response too large)
-// 2. 改用 Ankr 節點 (更穩定且回應輕量)
+// ⚠️ V9.4 終極修正：多重節點輪替機制 (Multi-RPC Failover)
+// 既然單一 RPC 容易失敗，我們就準備 5 個備用節點，一個接一個試，直到成功為止。
 const CHAINLINK_SOURCE = `
-// 1. 設定 Polygon 主網 RPC (使用 Ankr)
-const rpcUrl = "https://rpc.ankr.com/polygon"; 
+// 定義 RPC 候選名單 (優先順序排列)
+const rpcList = [
+    "https://polygon-bor-rpc.publicnode.com", // 通常最快
+    "https://rpc.ankr.com/polygon",           // 很穩定
+    "https://polygon-rpc.com",                // 官方聚合器
+    "https://1rpc.io/matic",                  // 隱私節點
+    "https://matic-mainnet.chainstacklabs.com" // 備用
+];
+
 const contractAddress = args[0];
 const data = "0x5d62d910"; // getPlayerCount() selector
 
-// 2. 發送 RPC 請求
-const request = Functions.makeHttpRequest({
-  url: rpcUrl,
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  data: {
-    jsonrpc: "2.0",
-    method: "eth_call",
-    params: [{ to: contractAddress, data: data }, "latest"],
-    id: 1
-  }
-});
-
-// 3. 等待回應
-const response = await request;
-
-// 4. 錯誤處理
-if (response.error) {
-  throw Error("RPC Request Failed");
+// 輔助函數：嘗試單一 RPC 請求
+async function tryRpc(url) {
+    console.log("Trying RPC:", url);
+    try {
+        const request = Functions.makeHttpRequest({
+            url: url,
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            data: {
+                jsonrpc: "2.0",
+                method: "eth_call",
+                params: [{ to: contractAddress, data: data }, "latest"],
+                id: 1
+            },
+            timeout: 5000 // 5秒超時設定
+        });
+        
+        const response = await request;
+        
+        // 嚴格檢查：如果有錯或回傳空值，拋出錯誤讓外層 catch 捕獲
+        if (response.error) throw new Error("Connection Failed");
+        if (!response.data || !response.data.result) throw new Error("Invalid Data (likely HTML)");
+        
+        return response.data.result;
+    } catch (e) {
+        console.log("RPC Failed:", e.message);
+        return null; // 回傳 null 表示這個節點失敗
+    }
 }
 
-// 嚴格檢查：確保回傳的是數據而不是 HTML 網頁
-if (!response.data || !response.data.result) {
-  throw Error("Invalid RPC Response - likely HTML error");
+// 主邏輯：輪詢所有 RPC
+let hexCount = null;
+
+for (let i = 0; i < rpcList.length; i++) {
+    hexCount = await tryRpc(rpcList[i]);
+    if (hexCount) break; // 如果成功拿到數據，跳出迴圈
 }
 
-// 5. 解析玩家人數
-const hexCount = response.data.result;
+if (!hexCount) {
+    throw Error("All RPCs failed. Please try again later.");
+}
+
+// 解析數據
 const count = parseInt(hexCount, 16);
-console.log("Player Count:", count);
+console.log("Final Player Count:", count);
 
 if (isNaN(count)) {
-  throw Error("Invalid count data");
+  throw Error("Invalid count parsed");
 }
 
-// 如果沒人玩，避免除以零錯誤
 if (count === 0) {
     return Functions.encodeUint256(BigInt(0));
 }
 
-// 6. 決定贏家 (確定性算法)
+// 決定贏家 (確定性算法)
 const seed = count * 997 + 123;
 const winnerIndex = seed % count;
 
 console.log("Winner Index:", winnerIndex);
 
-// 7. 回傳結果
 return Functions.encodeUint256(BigInt(winnerIndex));
 `;
 
@@ -228,12 +247,12 @@ buyBtn.onclick = async () => {
 
 document.getElementById('draw-btn').onclick = async () => {
     if (!contract) return alert("Contract address not set in script.js");
-    setLoading(true, "REQUESTING RANDOMNESS...");
+    setLoading(true, "REQUESTING RANDOMNESS (MULTI-RPC MODE)...");
     try {
-        // V9.3: 這裡會將新的 Ankr 腳本傳給 Chainlink
+        // V9.4: 使用新的多重節點輪替腳本
         const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        alert("Draw Initiated! Oracle is processing (Wait ~1 min)...");
+        alert("Draw Initiated! Oracle is cycling through RPCs to find a stable connection (Wait ~1-2 min)...");
     } catch (e) {
         alert("Draw Failed: " + (e.reason || "Check console"));
     }
