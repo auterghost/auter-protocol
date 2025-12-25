@@ -1,20 +1,21 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ PASTE YOUR DEPLOYED CONTRACT ADDRESS HERE
+// ⚠️ PASTE YOUR DEPLOYED V9 CONTRACT ADDRESS HERE AFTER DEPLOYMENT
 const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; 
 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
-// --- ABI ---
+// --- ABI (Updated for V9) ---
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
   "function pendingWinnings(address) view returns (uint256)",
   "function claimPrize() external",
   "function performUpkeep(string calldata source) external",
-  "event TicketPurchased(address indexed player, bytes choices, uint256 timestamp)"
+  "event TicketPurchased(address indexed player, bytes choices, uint256 timestamp)",
+  "function emergencyWithdraw() external" 
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
@@ -112,9 +113,11 @@ async function connectWallet() {
         }
 
         // Setup Contract
-        if (CONTRACT_ADDRESS && CONTRACT_ADDRESS.length > 0) {
+        if (CONTRACT_ADDRESS && CONTRACT_ADDRESS.length > 10) {
             contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
             refreshData();
+        } else {
+            console.warn("Contract Address NOT SET in script.js");
         }
 
         // Update UI
@@ -127,7 +130,7 @@ async function connectWallet() {
         document.getElementById('balance-display').innerText = `${ethers.formatEther(bal).slice(0,5)} POL`;
 
     } catch (e) {
-        console.error("Wallet connection failed");
+        console.error("Wallet connection failed", e);
     }
 }
 
@@ -144,8 +147,8 @@ async function refreshData() {
         const winEth = ethers.formatEther(winnings);
         document.getElementById('my-winnings').innerText = `${winEth} POL`;
         
+        const btn = document.getElementById('claim-btn');
         if (Number(winEth) > 0) {
-            const btn = document.getElementById('claim-btn');
             btn.classList.remove('hidden');
             btn.onclick = async () => {
                 setLoading(true, "CLAIMING PRIZE...");
@@ -155,19 +158,21 @@ async function refreshData() {
                     alert("Prize Claimed Successfully!");
                     refreshData();
                 } catch(e) {
-                    alert("Claim failed");
+                    alert("Claim failed: " + (e.reason || "Unknown"));
                 }
                 setLoading(false);
             };
+        } else {
+            btn.classList.add('hidden');
         }
     } catch(e) { 
-        // Silent fail for refresh data to avoid console spam in production
+        // Silent fail
     }
 }
 
 // --- ACTIONS ---
 buyBtn.onclick = async () => {
-    if (!contract) return alert("Contract address not set");
+    if (!contract) return alert("Contract address not set in script.js");
     setLoading(true, "MINTING TICKET...");
     try {
         const coords = currentSelection.map(num => {
@@ -191,12 +196,12 @@ buyBtn.onclick = async () => {
 };
 
 document.getElementById('draw-btn').onclick = async () => {
-    if (!contract) return alert("Contract address not set");
+    if (!contract) return alert("Contract address not set in script.js");
     setLoading(true, "REQUESTING RANDOMNESS...");
     try {
         const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        alert("Draw Initiated! The Oracle is calculating the winner...");
+        alert("Draw Initiated! Oracle is processing...");
     } catch (e) {
         alert("Draw Failed: " + (e.reason || "Check console"));
     }
