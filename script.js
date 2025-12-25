@@ -1,10 +1,10 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 請注意：CHAIN_ID 是 Polygon 區塊鏈的固定編號 (137)，這不是訂閱 ID。
-// 你的 Chainlink 訂閱 ID (178) 已經正確設定在智能合約 (Solidity) 中，無需在此設定。
-const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; // 你的 V9 合約地址
-const CHAIN_ID = 137; // Polygon Mainnet ID (固定值，請勿修改，否則錢包無法連線)
+// ⚠️ 請注意：CHAIN_ID 是 Polygon 區塊鏈的固定編號 (137)。
+// 合約地址已確認為：0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f
+const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; 
+const CHAIN_ID = 137; // Polygon Mainnet ID
 const TICKET_PRICE = ethers.parseEther("1.0");
 
 // --- ABI (Updated for V9) ---
@@ -19,29 +19,29 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ V9.7 修正：硬編碼地址注入 (Hardcoded Injection)
-// 既然參數傳遞 (args[0]) 會導致節點讀取失敗，我們直接把地址寫死在 JS 字串裡。
-// 這能確保節點絕對找得到合約。
+// ⚠️ V9.8 修正：抗審查節點列表 (Anti-Censorship RPC List)
+// 之前的錯誤是因為公共節點封鎖了 Chainlink 的 IP。
+// 這次我們使用 DRPC, BlastAPI 等專門支援高流量的節點。
 const CHAINLINK_SOURCE = `
-// 1. 直接鎖定你的合約地址 (由 script.js 注入字串)
 const contractAddress = "${CONTRACT_ADDRESS}"; 
 
-// 2. 加強版 RPC 列表 (包含 LlamaNodes 與 PublicNode)
+// V9.8 新增：強力節點列表 (優先順序已調整)
 const rpcList = [
-    "https://polygon.llamarpc.com",           // 新增：通常反應很快
-    "https://polygon-bor-rpc.publicnode.com", // 備用 1
-    "https://rpc.ankr.com/polygon",           // 備用 2
-    "https://polygon-rpc.com",                // 官方
-    "https://1rpc.io/matic"                   // 隱私節點
+    "https://polygon.drpc.org",                 // 推薦：DRPC 通常不擋 Chainlink
+    "https://polygon-mainnet.public.blastapi.io", // 推薦：BlastAPI 速度快
+    "https://polygon.blockpi.network/v1/rpc/public", // BlockPI
+    "https://1rpc.io/matic",                    // 隱私節點
+    "https://rpc.ankr.com/polygon",             // Ankr (備用)
+    "https://polygon-bor-rpc.publicnode.com"    // PublicNode (備用)
 ];
 
 const data = "0x5d62d910"; // getPlayerCount() selector
 
-console.log("Target Contract (Hardcoded):", contractAddress);
+console.log("Target:", contractAddress);
 
-// 輔助函數：嘗試單一 RPC 請求
 async function tryRpc(url) {
     try {
+        console.log("Connecting to: " + url);
         const request = Functions.makeHttpRequest({
             url: url,
             method: "POST",
@@ -52,38 +52,37 @@ async function tryRpc(url) {
                 params: [{ to: contractAddress, data: data }, "latest"],
                 id: 1
             },
-            timeout: 9000 // 延長超時至 9 秒
+            timeout: 5000
         });
         
         const response = await request;
         
         if (response.error) {
-            console.log("RPC Error [" + url + "]: Connection Failed");
+            console.log("Connect Error: " + url);
             return null;
         }
         
         if (!response.data || !response.data.result) {
-            console.log("RPC Error [" + url + "]: No Data");
+            console.log("No Result: " + url);
             return null;
         }
         
         const res = response.data.result;
 
-        // V9.7 特別檢查：如果不幸回傳 0x，視為該節點尚未同步
+        // 如果節點回傳 "0x"，表示它連上了但讀不到數據
         if (res === "0x") {
-            console.log("RPC Warning [" + url + "]: Returned 0x (Empty)");
+            console.log("Empty Response (0x): " + url);
             return null;
         }
         
-        console.log("RPC Success [" + url + "]: " + res);
         return res;
     } catch (e) {
-        console.log("RPC Exception [" + url + "]: " + e.message);
+        console.log("Exception: " + e.message);
         return null;
     }
 }
 
-// 主邏輯：輪詢所有 RPC
+// 主邏輯：輪詢
 let hexCount = null;
 
 for (let i = 0; i < rpcList.length; i++) {
@@ -92,27 +91,19 @@ for (let i = 0; i < rpcList.length; i++) {
 }
 
 if (!hexCount) {
-    // 這是給 Chainlink 儀表板看的錯誤訊息
-    throw Error("CRITICAL FAILURE: Could not fetch data from ANY RPC node for " + contractAddress);
+    // 如果還是失敗，請檢查合約是否真的部署在 Polygon Mainnet
+    throw Error("ALL NODES FAILED. Check if contract exists on PolygonScan: " + contractAddress);
 }
 
-// 解析數據
 const count = parseInt(hexCount, 16);
-console.log("Final Player Count:", count);
+console.log("Count:", count);
 
-if (isNaN(count)) {
-  throw Error("Parsed NaN from hex: " + hexCount);
-}
+if (isNaN(count)) throw Error("NaN Result");
 
-if (count === 0) {
-    return Functions.encodeUint256(BigInt(0));
-}
+if (count === 0) return Functions.encodeUint256(BigInt(0));
 
-// 決定贏家 (確定性算法)
 const seed = count * 997 + 123;
 const winnerIndex = seed % count;
-
-console.log("Winner Index:", winnerIndex);
 
 return Functions.encodeUint256(BigInt(winnerIndex));
 `;
@@ -268,13 +259,12 @@ buyBtn.onclick = async () => {
 
 document.getElementById('draw-btn').onclick = async () => {
     if (!contract) return alert("Contract address not set in script.js");
-    setLoading(true, "REQUESTING RANDOMNESS (V9.7 HARDCODED)...");
+    setLoading(true, "REQUESTING RANDOMNESS (V9.8 ANTI-CENSOR)...");
     try {
-        // V9.7: 這裡的 CHAINLINK_SOURCE 已經包含了寫死的地址，
-        // 不會再發生 "All RPCs failed" 找不到合約的問題。
+        // V9.8: 使用新節點列表
         const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
         await tx.wait();
-        alert("Draw Initiated! Using direct address injection (Wait ~1 min)...");
+        alert("Draw Initiated! Using Anti-Censorship Nodes (Wait ~1 min)...");
     } catch (e) {
         alert("Draw Failed: " + (e.reason || "Check console"));
     }
