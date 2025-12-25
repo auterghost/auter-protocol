@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
 // ⚠️ 部署 AuterArkV14_Diagnostic.txt 後，請貼上新地址
-const CONTRACT_ADDRESS = ""; 
+const CONTRACT_ADDRESS = "0xBb6a4aacD760F9B5aC7871A5897aB30cF7149d65"; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
