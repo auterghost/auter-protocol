@@ -1,8 +1,8 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 部署 AuterArkV11_Native.txt 後，請貼上新地址
-const CONTRACT_ADDRESS = "0xF13Bb282b3d13aa16Fcd2980BAe7db2EaA9340aa"; 
+// ⚠️ 部署 AuterArkV12_Final.txt 後，請貼上新地址
+const CONTRACT_ADDRESS = "0xE1116629228F9f338b903dd94784BA17aD2193A3"; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
@@ -185,26 +185,32 @@ buyBtn.onclick = async () => {
 drawBtn.onclick = async () => {
     if (!contract || CONTRACT_ADDRESS.length < 10) return alert("Contract address missing! Please update script.js");
     
+    // 1. Check players LOCALLY first to avoid gas waste
     try {
         const players = await contract.getPlayerCount();
-        if (Number(players) === 0) return alert("❌ No players in the pool. Cannot draw.");
-    } catch(e) {}
+        if (Number(players) === 0) {
+            alert("⚠️ 錯誤：目前沒有玩家！\n\n您必須先「購買一張彩票」才能執行開獎。\n請選擇 6 個號碼並點擊 MINT TICKET。");
+            return;
+        }
+    } catch(e) {
+        console.warn("Could not fetch player count", e);
+    }
 
-    setLoading(true, "REQUESTING VRF (NATIVE POL)...");
+    setLoading(true, "REQUESTING VRF...");
     try {
-        // Gas Limit set to 500k for safe execution
         const tx = await contract.pickWinner({ gasLimit: 500000 });
         await tx.wait();
-        alert("✅ Randomness Requested via POL! \nWait ~30-60s for Chainlink VRF V2.5 callback.\nThe winner will appear automatically.");
+        alert("✅ Randomness Requested! \nWait ~30-60s. The winner will appear automatically.");
     } catch (e) {
         console.error("Draw Error:", e);
         let errorMsg = e.reason || e.message || "Unknown Error";
-        if(errorMsg.includes("user rejected")) {
-            errorMsg = "Transaction Rejected by User";
+        
+        if (errorMsg.includes("No players")) {
+             errorMsg = "❌ No players in pool! Buy a ticket first.";
         } else if (errorMsg.includes("execution reverted")) {
-            errorMsg = "Transaction Reverted! \n\nCHECKLIST FOR V11_NATIVE:\n1. Did you fund Subscription with **POL**? (Do NOT use LINK)\n2. Deposit at least 3 POL into Subscription.\n3. Ensure New Contract Address is added as Consumer.";
+            errorMsg = "❌ Transaction Reverted!\n\nFINAL CHECKLIST:\n1. Open vrf.chain.link (Polygon Mainnet).\n2. Is your Subscription funded with **POL**? (At least 3 POL)\n3. Did you 'Add Consumer' and paste the NEW Contract Address?\n4. Did you Buy a Ticket first?";
         }
-        alert("Draw Failed: \n" + errorMsg);
+        alert(errorMsg);
     }
     setLoading(false);
 };
