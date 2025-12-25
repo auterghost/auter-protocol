@@ -4,14 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Auter Ark - A futuristic Web3 reverse lottery game on Polygon. Connect wallet, select numbers, and win.">
-    <meta name="google" content="notranslate" value="no"> <!-- Hint for translation engines -->
+    <meta name="google" content="notranslate" value="no">
     
     <title>AUTER ARK | Web3 Lottery</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
     
     <style>
@@ -19,9 +16,12 @@
         .brand-font { font-family: 'Orbitron', sans-serif; }
         .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
         .selected-ball { background-color: #06b6d4; color: black; box-shadow: 0 0 15px rgba(6,182,212,0.6); transform: scale(1.1); }
+        /* Scrollbar for modal */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
     </style>
 
-    <!-- Import Map for Modules -->
     <script type="importmap">
     {
       "imports": {
@@ -32,7 +32,6 @@
 </head>
 <body class="min-h-screen pb-20 selection:bg-cyan-500 selection:text-black">
 
-    <!-- Background -->
     <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
         <div class="absolute top-0 left-1/4 w-96 h-96 bg-purple-900/20 rounded-full blur-[100px]"></div>
         <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-900/20 rounded-full blur-[100px]"></div>
@@ -40,7 +39,6 @@
     </div>
 
     <div class="container mx-auto px-4 py-6">
-        <!-- Header -->
         <header class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
             <div class="flex items-center gap-3">
                 <div class="w-12 h-12 bg-gradient-to-tr from-cyan-400 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
@@ -49,7 +47,7 @@
                 <div>
                     <h1 class="text-3xl font-bold brand-font text-white">AUTER ARK</h1>
                     <div class="flex items-center gap-2">
-                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V10.0 VRF 2.5 EDITION</p>
+                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V14.0 DIAGNOSTIC</p>
                     </div>
                 </div>
             </div>
@@ -64,25 +62,16 @@
             </div>
         </header>
 
-        <!-- Main Content (Hidden until connected) -->
         <div id="game-ui" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            <!-- Left Column: Number Grid -->
             <div class="lg:col-span-8 space-y-6">
-                
-                <!-- Number Grid -->
                 <div class="glass-panel p-6 rounded-2xl relative h-full flex flex-col justify-between">
                     <div>
                         <div class="flex justify-between items-center mb-6">
                             <h3 class="text-xl font-bold text-slate-200 brand-font">SELECT 6 NUMBERS</h3>
                             <span id="selection-count" class="text-xl font-bold font-mono text-slate-200">0/6</span>
                         </div>
-                        
-                        <div id="grid-container" class="grid grid-cols-7 sm:grid-cols-10 gap-2 sm:gap-3 p-4 bg-slate-900/50 rounded-xl">
-                            <!-- JS will inject buttons here -->
-                        </div>
+                        <div id="grid-container" class="grid grid-cols-7 sm:grid-cols-10 gap-2 sm:gap-3 p-4 bg-slate-900/50 rounded-xl"></div>
                     </div>
-
                     <div class="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
                         <div class="text-slate-400 text-sm w-full sm:w-auto text-center sm:text-left">
                             Cost per Ticket: <span class="text-cyan-400 font-bold block sm:inline text-lg sm:text-base">1.0 POL</span>
@@ -97,7 +86,6 @@
                 </div>
             </div>
 
-            <!-- Right Column: Stats & Admin -->
             <div class="lg:col-span-4 space-y-6">
                 <div class="bg-gradient-to-b from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-2xl relative overflow-hidden">
                     <h3 class="text-slate-400 text-sm font-bold tracking-widest mb-2">GLOBAL PRIZE POOL</h3>
@@ -115,8 +103,12 @@
                          </div>
                     </div>
 
-                    <button id="draw-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-4 rounded-xl font-bold tracking-widest border border-slate-600 hover:border-cyan-500 transition-all text-sm">
-                        ADMIN: EXECUTE DRAW (VRF)
+                    <button id="draw-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-4 rounded-xl font-bold tracking-widest border border-slate-600 hover:border-cyan-500 transition-all text-sm mb-2">
+                        EXECUTE DRAW (VRF)
+                    </button>
+                    
+                    <button id="check-btn" class="w-full bg-red-900/50 hover:bg-red-900/80 text-red-200 py-3 rounded-xl text-xs font-mono border border-red-800 tracking-wider">
+                        🛠️ OPEN DIAGNOSTIC PANEL
                     </button>
                 </div>
                 
@@ -125,26 +117,56 @@
                     <ul class="text-sm text-slate-400 space-y-3 list-none">
                         <li class="flex items-start gap-2">
                             <span class="text-cyan-500 font-bold">01.</span>
-                            <span>Mint a ticket by selecting 6 unique numbers.</span>
+                            <span>Mint a ticket (1 POL).</span>
                         </li>
                         <li class="flex items-start gap-2">
                             <span class="text-cyan-500 font-bold">02.</span>
-                            <span><strong>Reverse Logic:</strong> The winning combination is derived from the <em>least</em> popular numbers chosen by the community.</span>
-                        </li>
-                        <li class="flex items-start gap-2">
-                            <span class="text-cyan-500 font-bold">03.</span>
-                            <span>Limit: 1 Ticket per Wallet Address.</span>
+                            <span>Wait for draw.</span>
                         </li>
                     </ul>
                 </div>
             </div>
         </div>
         
+        <!-- Loading Overlay -->
         <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center">
              <div class="text-center">
                  <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-6 shadow-[0_0_30px_rgba(6,182,212,0.3)]"></div>
                  <p id="loading-text" class="text-cyan-400 font-bold brand-font text-xl tracking-widest animate-pulse">PROCESSING</p>
              </div>
+        </div>
+
+        <!-- DIAGNOSTIC MODAL -->
+        <div id="debug-modal" class="hidden fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+                <button id="close-debug" class="absolute top-4 right-4 text-slate-500 hover:text-white">✕</button>
+                
+                <h2 class="text-2xl font-bold brand-font text-white mb-6 flex items-center gap-2">
+                    <span class="text-yellow-500">⚠</span> SYSTEM DIAGNOSTIC
+                </h2>
+
+                <div id="debug-content" class="space-y-4 font-mono text-sm text-slate-300">
+                    <p class="text-center animate-pulse">Scanning Blockchain...</p>
+                </div>
+
+                <div class="mt-8 pt-6 border-t border-slate-800">
+                    <h3 class="text-white font-bold mb-2">DEBUG CHECKLIST (MUST DO):</h3>
+                    <ol class="list-decimal pl-5 space-y-2 text-slate-400">
+                        <li>Is <strong>Subscription ID</strong> detected above same as your Chainlink ID?</li>
+                        <li>Is <strong>Contract Balance</strong> > 0 (Did you buy a ticket)?</li>
+                        <li>Click the <span class="text-cyan-400">CHAINLINK PANEL</span> link below. Does "Consumers" list the Contract Address shown above?</li>
+                    </ol>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 mt-6">
+                    <a id="link-chainlink" href="#" target="_blank" class="block text-center bg-blue-900/50 hover:bg-blue-800 text-blue-200 py-3 rounded border border-blue-800">
+                        OPEN CHAINLINK PANEL ↗
+                    </a>
+                    <a id="link-polygonscan" href="#" target="_blank" class="block text-center bg-purple-900/50 hover:bg-purple-800 text-purple-200 py-3 rounded border border-purple-800">
+                        OPEN POLYGONSCAN ↗
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 
