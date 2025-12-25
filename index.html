@@ -1,70 +1,150 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AUTER ARK V8.0 - Polygon Mainnet</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <title>AUTER ARK | Web3 Lottery</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    
     <style>
-        body { font-family: 'Courier New', Courier, monospace; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f0f2f5; color: #333; }
-        .box { background: white; border: 2px solid #333; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 4px 4px 0px #333; }
-        h2 { margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        button { padding: 12px 20px; cursor: pointer; background-color: #333; color: white; border: none; border-radius: 8px; font-size: 16px; width: 100%; margin-top: 10px; font-weight: bold; transition: all 0.2s; }
-        button:hover { background-color: #555; transform: translateY(-2px); }
-        button:disabled { background-color: #ccc; cursor: not-allowed; transform: none; }
-        button.buy { background-color: #28a745; }
-        button.buy:hover { background-color: #218838; }
-        button.claim { background-color: #ffc107; color: black; display: none; } /* 預設隱藏 */
-        button.admin { background-color: #dc3545; margin-top: 20px; } /* 紅色開獎鈕 */
-        
-        /* 矩陣樣式 */
-        #gridContainer { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-top: 15px; }
-        .grid-btn { background: #fff; border: 1px solid #ccc; padding: 10px; text-align: center; cursor: pointer; border-radius: 5px; font-weight: bold; user-select: none; }
-        .grid-btn:hover { background-color: #e9ecef; }
-        .grid-btn.selected { background-color: #007bff; color: white; border-color: #0056b3; }
-
-        .info-tag { background: #e9ecef; padding: 5px 10px; border-radius: 4px; font-size: 14px; margin-bottom: 5px; display: inline-block; }
-        #status { white-space: pre-wrap; color: #d63384; font-weight: bold; margin-top: 10px; }
-        #winMessage { display: none; background: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-top: 10px; border: 1px solid #c3e6cb; }
+        body { font-family: 'Rajdhani', sans-serif; background-color: #050b14; color: #e2e8f0; }
+        .brand-font { font-family: 'Orbitron', sans-serif; }
+        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(148, 163, 184, 0.1); }
+        .selected-ball { background-color: #06b6d4; color: black; box-shadow: 0 0 15px rgba(6,182,212,0.6); transform: scale(1.1); }
     </style>
+
+    <!-- Import Map for Modules -->
+    <script type="importmap">
+    {
+      "imports": {
+        "ethers": "https://esm.sh/ethers@6.11.1"
+      }
+    }
+    </script>
 </head>
-<body>
+<body class="min-h-screen pb-20 selection:bg-cyan-500 selection:text-black">
 
-    <div class="box">
-        <h2>🛠️ 1. 錢包連線 (Wallet)</h2>
-        <div class="info-tag" id="networkStatus">Network: Polygon</div>
-        <button onclick="connectWallet()">🦊 連線 MetaMask</button>
-        <p id="status">🔴 尚未連線</p>
+    <!-- Background -->
+    <div class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+        <div class="absolute top-0 left-1/4 w-96 h-96 bg-purple-900/20 rounded-full blur-[100px]"></div>
+        <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-900/20 rounded-full blur-[100px]"></div>
+        <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5"></div>
     </div>
 
-    <div class="box">
-        <h2>🎫 2. 選擇矩陣 (Matrix)</h2>
-        <p>請選擇 6 個座標 (Unique Choice Wins)</p>
-        <div id="priceInfo">正在讀取票價...</div>
-        
-        <div id="gridContainer"></div>
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 bg-gradient-to-tr from-cyan-400 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
+                    <span class="text-2xl font-black text-white brand-font">A</span>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold brand-font text-white">AUTER ARK</h1>
+                    <div class="flex items-center gap-2">
+                        <p class="text-cyan-500 text-xs tracking-[0.2em] font-bold">V9.0 POLYGON MAINNET</p>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="connect-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-[0_0_20px_rgba(8,145,178,0.4)] brand-font">
+                CONNECT WALLET
+            </button>
+            <div id="wallet-info" class="hidden flex items-center gap-4 glass-panel px-4 py-2 rounded-lg">
+                <span id="balance-display" class="text-xl font-bold text-cyan-400 font-mono">0 POL</span>
+                <div class="h-8 w-px bg-slate-700 mx-2"></div>
+                <span id="address-display" class="text-sm font-mono text-slate-200">...</span>
+            </div>
+        </header>
 
-        <div style="margin-top: 15px;">
-            <strong>已選號碼：</strong> <span id="selectedCoords">(無)</span>
-            <br>
-            <strong>數量：</strong> <span id="selectedCount">0</span>/6
+        <!-- Main Content (Hidden until connected) -->
+        <div id="game-ui" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Column: Number Grid -->
+            <div class="lg:col-span-8 space-y-6">
+                
+                <!-- Number Grid -->
+                <div class="glass-panel p-6 rounded-2xl relative h-full flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold text-slate-200 brand-font">SELECT 6 NUMBERS</h3>
+                            <span id="selection-count" class="text-xl font-bold font-mono text-slate-200">0/6</span>
+                        </div>
+                        
+                        <div id="grid-container" class="grid grid-cols-7 sm:grid-cols-10 gap-2 sm:gap-3 p-4 bg-slate-900/50 rounded-xl">
+                            <!-- JS will inject buttons here -->
+                        </div>
+                    </div>
+
+                    <div class="mt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                        <div class="text-slate-400 text-sm w-full sm:w-auto text-center sm:text-left">
+                            Cost per Ticket: <span class="text-cyan-400 font-bold block sm:inline text-lg sm:text-base">1.0 POL</span>
+                        </div>
+                        <div class="flex gap-4 w-full sm:w-auto justify-end">
+                            <button id="clear-btn" class="flex-1 sm:flex-none px-4 py-3 rounded-lg border border-slate-600 text-slate-400 hover:bg-slate-800 font-bold">CLEAR</button>
+                            <button id="buy-btn" class="flex-1 sm:flex-none bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-8 py-3 rounded-lg font-bold brand-font shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 transition-all" disabled>
+                                MINT TICKET
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Stats & Admin -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="bg-gradient-to-b from-slate-800 to-slate-900 p-6 rounded-2xl border border-slate-700 shadow-2xl relative overflow-hidden">
+                    <h3 class="text-slate-400 text-sm font-bold tracking-widest mb-2">GLOBAL PRIZE POOL</h3>
+                    <div class="text-4xl font-black text-white brand-font mb-6"><span id="pool-size">0</span> <span class="text-cyan-500 text-lg">POL</span></div>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                         <div class="bg-slate-800/50 p-3 rounded border border-slate-700">
+                            <p class="text-xs text-slate-500 mb-1">Players</p>
+                            <p id="player-count" class="font-bold text-xl">0</p>
+                         </div>
+                         <div class="bg-slate-800/50 p-3 rounded border border-slate-700">
+                            <p class="text-xs text-slate-500 mb-1">My Winnings</p>
+                            <p id="my-winnings" class="font-bold text-xl text-green-400">0</p>
+                            <button id="claim-btn" class="hidden w-full text-xs bg-green-600 hover:bg-green-500 px-2 py-1.5 rounded text-white mt-2 font-bold tracking-wider transition-colors">CLAIM PRIZE</button>
+                         </div>
+                    </div>
+
+                    <button id="draw-btn" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 py-4 rounded-xl font-bold tracking-widest border border-slate-600 hover:border-cyan-500 transition-all text-sm">
+                        ADMIN: EXECUTE DRAW
+                    </button>
+                </div>
+                
+                <div class="glass-panel rounded-2xl p-6">
+                    <h3 class="text-lg font-bold text-slate-300 brand-font mb-4">PROTOCOL RULES</h3>
+                    <ul class="text-sm text-slate-400 space-y-3 list-none">
+                        <li class="flex items-start gap-2">
+                            <span class="text-cyan-500 font-bold">01.</span>
+                            <span>Mint a ticket by selecting 6 unique numbers.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-cyan-500 font-bold">02.</span>
+                            <span><strong>Reverse Logic:</strong> The winning combination is derived from the <em>least</em> popular numbers chosen by the community.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-cyan-500 font-bold">03.</span>
+                            <span>Limit: 1 Ticket per Wallet Address.</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </div>
-
-        <button id="btnBuy" class="buy" onclick="buyTicket()" disabled>💰 請先選擇 6 個號碼</button>
-    </div>
-
-    <div class="box">
-        <h2>🏆 3. 獎金與開獎 (Prizes)</h2>
-        <div id="claimStatus">查詢中...</div>
-        <div id="winMessage"></div>
-        <button id="btnClaim" class="claim" onclick="claimPrize()">🎁 提領獎金 (Claim Prize)</button>
         
-        <hr>
-        <p style="font-size: 12px; color: #666;">🔧 管理員專區 (Admin Only)</p>
-        <button class="admin" onclick="drawWinner()">🎲 立即開獎 (Draw Winner)</button>
+        <div id="loading-overlay" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center">
+             <div class="text-center">
+                 <div class="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mx-auto mb-6 shadow-[0_0_30px_rgba(6,182,212,0.3)]"></div>
+                 <p id="loading-text" class="text-cyan-400 font-bold brand-font text-xl tracking-widest animate-pulse">PROCESSING</p>
+             </div>
+        </div>
     </div>
 
-    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>
-""
