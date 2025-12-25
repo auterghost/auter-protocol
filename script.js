@@ -1,22 +1,26 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ V10.3 PRODUCTION: 已填入部署後的合約地址
 const CONTRACT_ADDRESS = "0x01b1e5424C982d8209679DA404ff3247ed9687B5"; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
-// --- ABI (Updated for V10.3 Production) ---
+// 這是您截圖中正確的 Chainlink VRF Subscription ID
+const CORRECT_SUB_ID = "91085056963050045204976540555110204657705201567062698051797821556862941861279";
+
+// --- ABI ---
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
   "function pendingWinnings(address) view returns (uint256)",
   "function claimPrize() external",
   "function pickWinner() external",
-  // Admin Functions
+  // Admin & Debug Functions
   "function emergencyWithdraw() external",
   "function setMarketStatus(bool _isOpen) external",
   "function isMarketOpen() view returns (bool)",
+  "function s_subscriptionId() view returns (uint256)", // 读取合約內的 SubID
+  "function setChainlinkConfig(uint256 _subId, uint32 _gasLimit, bytes32 _keyHash) external", // 修復用
   // Events
   "event TicketPurchased(address indexed player)", 
   "event WinnerPicked(address indexed winner, uint256 prize, uint256 fee, uint256 randomValue)"
@@ -35,6 +39,7 @@ const gridContainer = document.getElementById('grid-container');
 const selectionCount = document.getElementById('selection-count');
 const buyBtn = document.getElementById('buy-btn');
 const clearBtn = document.getElementById('clear-btn');
+const drawBtn = document.getElementById('draw-btn');
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
 
@@ -78,7 +83,6 @@ async function connectWallet() {
         signer = await provider.getSigner();
         walletAddress = await signer.getAddress();
 
-        // Switch Chain
         const net = await provider.getNetwork();
         if (Number(net.chainId) !== CHAIN_ID) {
             try {
@@ -89,16 +93,13 @@ async function connectWallet() {
             }
         }
 
-        // Setup Contract
         if (CONTRACT_ADDRESS && CONTRACT_ADDRESS.length > 10) {
             contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
             refreshData();
+            checkConfigDiagnostic(); // 執行診斷
             setupEvents();
-        } else {
-            console.warn("⚠️ PLEASE DEPLOY V10.3 CONTRACT AND UPDATE SCRIPT.JS");
         }
 
-        // Update UI
         connectBtn.classList.add('hidden');
         walletInfo.classList.remove('hidden');
         gameUI.classList.remove('hidden');
@@ -111,9 +112,59 @@ async function connectWallet() {
     }
 }
 
+// --- DIAGNOSTIC TOOL (AUTO FIXER) ---
+async function checkConfigDiagnostic() {
+    try {
+        console.log("Running diagnostics...");
+        // 1. 檢查 Sub ID
+        const currentSubId = await contract.s_subscriptionId();
+        const currentIdStr = currentSubId.toString();
+        
+        console.log(`On-Chain ID: ${currentIdStr}`);
+        console.log(`Correct ID:  ${CORRECT_SUB_ID}`);
+
+        if (currentIdStr !== CORRECT_SUB_ID) {
+            drawBtn.classList.add('hidden'); // 隱藏開獎按鈕
+            
+            // 創建修復按鈕
+            const fixBtn = document.createElement('button');
+            fixBtn.id = "fix-btn";
+            fixBtn.className = "w-full bg-red-600 hover:bg-red-500 text-white py-4 rounded-xl font-bold tracking-widest border border-red-400 animate-pulse mb-2";
+            fixBtn.innerHTML = `⚠️ CONFIG MISMATCH DETECTED<br><span class="text-xs">CLICK TO FIX SUBSCRIPTION ID</span>`;
+            fixBtn.onclick = fixConfiguration;
+            
+            drawBtn.parentNode.insertBefore(fixBtn, drawBtn);
+            alert("⚠️ 檢測到設定錯誤：合約內的訂閱 ID 與 Chainlink 不符。\n請點擊紅色的 'FIX' 按鈕進行修復，修復後即可開獎。");
+        } else {
+            console.log("Config is CORRECT ✅");
+        }
+    } catch (e) {
+        console.warn("Diagnostic failed:", e);
+    }
+}
+
+async function fixConfiguration() {
+    setLoading(true, "FIXING CONFIG...");
+    try {
+        // VRF V2.5 KeyHash (Polygon Mainnet - 1000 gwei lane)
+        const keyHash = "0x719e78216d7a488f7808298782a22235948f95c010b490f05560b457b0784d86";
+        const gasLimit = 300000;
+        
+        // 呼叫管理員功能更新 ID
+        const tx = await contract.setChainlinkConfig(CORRECT_SUB_ID, gasLimit, keyHash);
+        await tx.wait();
+        
+        alert("Config Fixed! You can now draw.");
+        document.getElementById('fix-btn').remove();
+        drawBtn.classList.remove('hidden');
+    } catch (e) {
+        alert("Fix failed: " + (e.reason || e.message));
+    }
+    setLoading(false);
+}
+
 function setupEvents() {
     if (!contract) return;
-    // Listen for WinnerPicked to refresh UI automatically
     contract.on("WinnerPicked", (winner, prize, fee) => {
         console.log(`Winner picked: ${winner}`);
         alert(`🎉 Winner Picked! \nWinner: ${winner.slice(0,6)}... \nPrize: ${ethers.formatEther(prize)} POL`);
@@ -185,18 +236,23 @@ buyBtn.onclick = async () => {
     setLoading(false);
 };
 
-// 🔴 修正：強制設定 Gas Limit 並顯示真實錯誤
-document.getElementById('draw-btn').onclick = async () => {
+drawBtn.onclick = async () => {
     if (!contract) return alert("Contract address missing in script.js");
+    
+    // Safety Check: Ensure there are players
+    try {
+        const players = await contract.getPlayerCount();
+        if (Number(players) === 0) return alert("❌ No players in the pool. Cannot draw.");
+    } catch(e) {}
+
     setLoading(true, "REQUESTING VRF RANDOMNESS...");
     try {
-        // 手動設定 Gas Limit 為 500,000，防止 RPC 估算錯誤
+        // Manually set Gas Limit to prevent RPC estimation errors on Polygon
         const tx = await contract.pickWinner({ gasLimit: 500000 });
         await tx.wait();
-        alert("Randomness Requested! Wait ~30s for Chainlink VRF V2.5 callback.");
+        alert("✅ Randomness Requested! \nWait ~30-60s for Chainlink VRF V2.5 callback.\nThe winner will appear automatically.");
     } catch (e) {
         console.error("Draw Error:", e);
-        // 顯示真實的錯誤原因
         let errorMsg = e.reason || e.message || "Unknown Error";
         if(errorMsg.includes("user rejected")) errorMsg = "Transaction Rejected by User";
         alert("Draw Failed: " + errorMsg);
