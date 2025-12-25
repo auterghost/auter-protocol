@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
 // ⚠️ PASTE YOUR DEPLOYED V9 CONTRACT ADDRESS HERE AFTER DEPLOYMENT
-const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; 
+const CONTRACT_ADDRESS = ""; 
 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
@@ -19,19 +19,14 @@ const ABI = [
 ];
 
 // --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ FIX for Chainlink Functions V1.0: Replaced makeEthereumCall with makeHttpRequest
+// ⚠️ FIX: Robust RPC handling + Deterministic Winner Selection + BigInt casting
 const CHAINLINK_SOURCE = `
-// 1. 設定 Polygon 主網的 RPC 節點 (用來讀取鏈上數據)
+// 1. 設定 Polygon 主網 RPC
 const rpcUrl = "https://polygon-bor-rpc.publicnode.com";
-
-// 2. 獲取合約地址 (從 args[0] 傳入)
 const contractAddress = args[0];
+const data = "0x5d62d910"; // getPlayerCount() selector
 
-// 3. 準備讀取 "getPlayerCount()" 的函數選擇器 (Keccak-256 hash prefix)
-// getPlayerCount() -> 0x5d62d910
-const data = "0x5d62d910";
-
-// 4. 發送標準 HTTP 請求給 RPC 節點
+// 2. 發送 RPC 請求
 const request = Functions.makeHttpRequest({
   url: rpcUrl,
   method: "POST",
@@ -39,39 +34,41 @@ const request = Functions.makeHttpRequest({
   data: {
     jsonrpc: "2.0",
     method: "eth_call",
-    params: [{
-      to: contractAddress,
-      data: data
-    }, "latest"],
+    params: [{ to: contractAddress, data: data }, "latest"],
     id: 1
   }
 });
 
-// 5. 等待回應
 const response = await request;
 
+// 3. 錯誤處理與數據驗證
 if (response.error) {
-  throw Error("RPC Error: " + JSON.stringify(response));
+  throw Error("RPC Request Failed");
+}
+if (!response.data || !response.data.result) {
+  throw Error("Invalid RPC Response: " + JSON.stringify(response));
 }
 
-// 6. 解析回傳的人數 (Hex -> Int)
+// 4. 解析玩家人數
 const hexCount = response.data.result;
 const count = parseInt(hexCount, 16);
+console.log("Player Count:", count);
 
-console.log("Player count:", count);
-
-if (count === 0) {
-  throw Error("No players to pick from!");
+if (isNaN(count) || count === 0) {
+  throw Error("No players or invalid count data");
 }
 
-// 7. 產生贏家 (因為 V1.0 讀取複雜陣列受限，V9 改採隨機選取以確保開獎成功)
-// 這裡我們用區塊隨機性結合 Math.random
-const winnerIndex = Math.floor(Math.random() * count);
+// 5. 決定贏家 (使用確定性算法以避免 Consensus Error)
+// 注意：Math.random() 在去中心化網路中會導致節點結果不一致而失敗
+// 這裡我們使用簡單的確定性算法 (基於人數的偽隨機) 來確保所有節點達成共識
+// 在這個版本中，我們選取最後一位加入的玩家作為贏家，或者使用簡單的模運算
+const seed = count * 997 + 123; 
+const winnerIndex = seed % count;
 
 console.log("Winner Index:", winnerIndex);
 
-// 8. 回傳贏家索引值 (Encoding)
-return Functions.encodeUint256(winnerIndex);
+// 6. 回傳結果 (強制轉為 BigInt 以修復 'not an integer' 錯誤)
+return Functions.encodeUint256(BigInt(winnerIndex));
 `;
 
 // --- STATE ---
