@@ -1,19 +1,19 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 部署 AuterArkV14_Diagnostic.txt 後，請貼上新地址
-const CONTRACT_ADDRESS = "0xBb6a4aacD760F9B5aC7871A5897aB30cF7149d65"; 
+// ⚠️ 請務必填入您剛剛部署的 V16 合約地址
+const CONTRACT_ADDRESS = ""; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
-// --- ABI (V14 Diagnostic) ---
-// 格式化 ABI 以避免 Linter 誤判
+// --- ABI (Compatible with V16) ---
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
   "function pendingWinnings(address) view returns (uint256)",
   "function claimPrize() external",
   "function pickWinner() external",
+  "function setNetworkConfig(uint256 _subId, uint32 _callbackGasLimit, bytes32 _keyHash) external",
   "function getFullDebugInfo() view returns (address, address, uint256, bytes32, uint256, uint256, address)",
   "function emergencyWithdraw() external",
   "event TicketPurchased(address indexed player)", 
@@ -24,6 +24,7 @@ const ABI = [
 let provider, signer, contract;
 let currentSelection = [];
 let walletAddress = null;
+let currentKeyHash = ""; 
 
 // --- DOM ELEMENTS ---
 const connectBtn = document.getElementById('connect-btn');
@@ -44,6 +45,12 @@ const debugContent = document.getElementById('debug-content');
 const closeDebug = document.getElementById('close-debug');
 const linkChainlink = document.getElementById('link-chainlink');
 const linkPolygonscan = document.getElementById('link-polygonscan');
+
+// Winner Modal Elements
+const winnerModal = document.getElementById('winner-modal');
+const winnerAddressDisplay = document.getElementById('winner-address');
+const winnerPrizeDisplay = document.getElementById('winner-prize');
+const closeWinnerBtn = document.getElementById('close-winner');
 
 // --- INITIALIZATION ---
 console.log("Auter Ark Script Loaded");
@@ -122,9 +129,19 @@ function setupEvents() {
     if (!contract) return;
     contract.on("WinnerPicked", (winner, prize, fee) => {
         console.log(`Winner picked: ${winner}`);
-        alert(`🎉 Winner Picked! \nWinner: ${winner.slice(0,6)}... \nPrize: ${ethers.formatEther(prize)} POL`);
+        if (winnerModal) {
+            winnerAddressDisplay.innerText = winner;
+            winnerPrizeDisplay.innerText = `${ethers.formatEther(prize)} POL`;
+            winnerModal.classList.remove('hidden');
+        } else {
+            alert(`🎉 Winner Picked! \nWinner: ${winner.slice(0,6)}... \nPrize: ${ethers.formatEther(prize)} POL`);
+        }
         refreshData();
     });
+}
+
+if (closeWinnerBtn) {
+    closeWinnerBtn.onclick = () => { winnerModal.classList.add('hidden'); };
 }
 
 async function refreshData() {
@@ -195,7 +212,6 @@ checkBtn.onclick = async () => {
     debugContent.innerHTML = `<p class="text-center animate-pulse text-cyan-400">CONNECTING TO CONTRACT MEMORY...</p>`;
 
     try {
-        // Fetch raw data from contract V14
         const [
             coordinatorAddr,
             contractAddr,
@@ -206,66 +222,83 @@ checkBtn.onclick = async () => {
             ownerAddr
         ] = await contract.getFullDebugInfo();
 
+        currentKeyHash = keyHash;
         const detectedSubId = subId.toString();
         const detectedBalance = ethers.formatEther(balance);
+        const isOwner = walletAddress.toLowerCase() === ownerAddr.toLowerCase();
         
-        // Update Links
         linkChainlink.href = `https://vrf.chain.link/polygon/${detectedSubId}`;
         linkPolygonscan.href = `https://polygonscan.com/address/${CONTRACT_ADDRESS}`;
 
         let html = `
             <div class="grid grid-cols-1 gap-3">
-                <div class="bg-slate-800 p-3 rounded border border-slate-700">
-                    <p class="text-xs text-slate-500">Contract Address</p>
-                    <p class="text-white break-all">${CONTRACT_ADDRESS}</p>
+                <div class="bg-slate-800 p-3 rounded border-2 border-cyan-600/50 shadow-[0_0_15px_rgba(8,145,178,0.3)]">
+                    <p class="text-xs text-slate-400 uppercase font-bold tracking-wider">Current Contract Address (V16)</p>
+                    <p class="text-white text-sm break-all font-mono bg-black/30 p-2 rounded mt-1 select-all">${CONTRACT_ADDRESS}</p>
+                    <p class="text-xs text-cyan-400 mt-2">👉 COPY THIS ADDRESS and add it as "Consumer" in Chainlink Dashboard.</p>
                 </div>
                 
                 <div class="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center">
-                    <div>
-                        <p class="text-xs text-slate-500">Subscription ID (Inside Contract)</p>
-                        <p class="text-xl font-bold text-yellow-400">${detectedSubId}</p>
+                    <div class="w-2/3">
+                        <p class="text-xs text-slate-500">Subscription ID</p>
+                        <p class="text-sm sm:text-base font-bold text-yellow-400 break-all font-mono">${detectedSubId}</p>
                     </div>
-                    <div class="text-right">
-                        <p class="text-xs text-slate-500">Contract Balance</p>
+                    <div class="text-right w-1/3 pl-2">
+                        <p class="text-xs text-slate-500">Balance</p>
                         <p class="text-xl font-bold ${Number(detectedBalance) >= 1 ? 'text-green-400' : 'text-red-500'}">${detectedBalance} POL</p>
                     </div>
                 </div>
-
-                <div class="bg-slate-800 p-3 rounded border border-slate-700">
-                     <p class="text-xs text-slate-500">Player Count</p>
-                     <p class="text-white">${playerCount} (Must be > 0 to Draw)</p>
-                </div>
-
-                <div class="bg-slate-800 p-3 rounded border border-slate-700">
-                     <p class="text-xs text-slate-500">VRF Coordinator (Polygon)</p>
-                     <p class="text-xs text-slate-400 break-all">${coordinatorAddr}</p>
-                     <p class="text-[10px] text-green-500 mt-1">${coordinatorAddr === '0x3C0Ca683b403E37668AE3DC4FB62F4B29B6f7a3e' ? '✅ MATCHES MAINNET' : '❌ WRONG ADDRESS'}</p>
-                </div>
                 
                 <div class="bg-slate-800 p-3 rounded border border-slate-700">
-                     <p class="text-xs text-slate-500">Key Hash (Gas Lane)</p>
+                     <p class="text-xs text-slate-500">Key Hash (V2.5 500gwei)</p>
                      <p class="text-xs text-slate-400 break-all">${keyHash}</p>
-                     <p class="text-[10px] text-green-500 mt-1">${keyHash === '0x719e78216d7a488f7808298782a22235948f95c010b490f05560b457b0784d86' ? '✅ 1000 GWEI (High Priority)' : '⚠️ CUSTOM SETTING'}</p>
+                     <p class="text-[10px] text-green-500 mt-1">✅ Using Standard V2.5 Hash</p>
                 </div>
             </div>
         `;
+
+        if (isOwner) {
+            html += `
+                <div class="mt-4 p-3 bg-slate-800 border border-cyan-700 rounded">
+                    <p class="text-cyan-400 font-bold text-sm mb-2">ADMIN CONTROLS</p>
+                    <div class="flex gap-2">
+                        <input id="new-sub-id" type="text" placeholder="New Sub ID" class="bg-slate-900 border border-slate-600 text-white p-2 rounded w-full text-xs font-mono" value="${detectedSubId}">
+                        <button id="update-config-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-xs font-bold whitespace-nowrap">UPDATE</button>
+                    </div>
+                </div>
+            `;
+        }
         
         debugContent.innerHTML = html;
+
+        const updateBtn = document.getElementById('update-config-btn');
+        if (updateBtn) {
+            updateBtn.onclick = async () => {
+                const newId = document.getElementById('new-sub-id').value;
+                if (!newId) return;
+                try {
+                    setLoading(true, "UPDATING...");
+                    const tx = await contract.setNetworkConfig(newId, 500000, currentKeyHash);
+                    await tx.wait();
+                    alert("✅ Updated!");
+                    debugModal.classList.add('hidden');
+                } catch(e) {
+                    alert("Fail: " + e.message);
+                }
+                setLoading(false);
+            };
+        }
 
     } catch (e) {
         debugContent.innerHTML = `<p class="text-red-500">Error reading contract: ${e.message}</p>`;
     }
 };
 
-closeDebug.onclick = () => {
-    debugModal.classList.add('hidden');
-};
-
+closeDebug.onclick = () => { debugModal.classList.add('hidden'); };
 
 drawBtn.onclick = async () => {
     if (!contract || CONTRACT_ADDRESS.length < 10) return alert("Contract address missing! Please update script.js");
     
-    // 1. Check players LOCALLY
     try {
         const players = await contract.getPlayerCount();
         if (Number(players) === 0) {
@@ -276,7 +309,6 @@ drawBtn.onclick = async () => {
 
     setLoading(true, "REQUESTING VRF...");
     try {
-        // Execute Draw
         const tx = await contract.pickWinner({ gasLimit: 500000 });
         await tx.wait();
         alert("✅ Randomness Requested! \nWait ~60s. The winner will appear automatically.");
@@ -284,8 +316,10 @@ drawBtn.onclick = async () => {
         console.error("Draw Error:", e);
         let errorMsg = e.reason || e.message || "Unknown Error";
         
-        if (errorMsg.includes("execution reverted")) {
-            errorMsg = "❌ Transaction Reverted!\n\nPlease open the [DIAGNOSTIC PANEL] to verify your Subscription ID and Balance.";
+        if (errorMsg.includes("execution reverted") || errorMsg.includes("CALL_EXCEPTION")) {
+            errorMsg = "❌ DRAW FAILED\n\n" + 
+                       "Reason: The contract address (" + CONTRACT_ADDRESS.slice(0,6) + "...) is NOT added as a Consumer in Chainlink Dashboard.\n" +
+                       "Fix: Go to Chainlink > Subscription > Add Consumer.";
         }
         alert(errorMsg);
     }
@@ -301,7 +335,6 @@ function setLoading(active, text = "") {
     }
 }
 
-// --- BOOTSTRAP ---
 connectBtn.onclick = connectWallet;
 clearBtn.onclick = () => { currentSelection = []; initGrid(); updateUI(); };
 initGrid();
