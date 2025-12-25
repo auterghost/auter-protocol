@@ -185,15 +185,21 @@ buyBtn.onclick = async () => {
     setLoading(false);
 };
 
+// 🔴 修正：強制設定 Gas Limit 並顯示真實錯誤
 document.getElementById('draw-btn').onclick = async () => {
     if (!contract) return alert("Contract address missing in script.js");
     setLoading(true, "REQUESTING VRF RANDOMNESS...");
     try {
-        const tx = await contract.pickWinner();
+        // 手動設定 Gas Limit 為 500,000，防止 RPC 估算錯誤
+        const tx = await contract.pickWinner({ gasLimit: 500000 });
         await tx.wait();
         alert("Randomness Requested! Wait ~30s for Chainlink VRF V2.5 callback.");
     } catch (e) {
-        alert("Draw Failed: " + (e.reason || "Check console (Only Owner can draw)"));
+        console.error("Draw Error:", e);
+        // 顯示真實的錯誤原因
+        let errorMsg = e.reason || e.message || "Unknown Error";
+        if(errorMsg.includes("user rejected")) errorMsg = "Transaction Rejected by User";
+        alert("Draw Failed: " + errorMsg);
     }
     setLoading(false);
 };
