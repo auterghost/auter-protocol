@@ -2,22 +2,20 @@ import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
 // ⚠️ 部署 AuterArkV14_Diagnostic.txt 後，請貼上新地址
-const CONTRACT_ADDRESS = "0xBb6a4aacD760F9B5aC7871A5897aB30cF7149d65"; 
+const CONTRACT_ADDRESS = ""; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
 // --- ABI (V14 Diagnostic) ---
+// 格式化 ABI 以避免 Linter 誤判
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
   "function pendingWinnings(address) view returns (uint256)",
   "function claimPrize() external",
   "function pickWinner() external",
-  // V14 New Diagnostic Function
   "function getFullDebugInfo() view returns (address, address, uint256, bytes32, uint256, uint256, address)",
-  // Admin & Debug Functions
   "function emergencyWithdraw() external",
-  // Events
   "event TicketPurchased(address indexed player)", 
   "event WinnerPicked(address indexed winner, uint256 prize, uint256 fee, uint256 randomValue)"
 ];
@@ -48,7 +46,10 @@ const linkChainlink = document.getElementById('link-chainlink');
 const linkPolygonscan = document.getElementById('link-polygonscan');
 
 // --- INITIALIZATION ---
+console.log("Auter Ark Script Loaded");
+
 function initGrid() {
+    if (!gridContainer) return;
     gridContainer.innerHTML = '';
     for (let i = 1; i <= 49; i++) {
         const btn = document.createElement('button');
