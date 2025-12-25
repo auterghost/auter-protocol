@@ -1,112 +1,26 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 請注意：CHAIN_ID 是 Polygon 區塊鏈的固定編號 (137)。
-// 合約地址已確認為：0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f
-const CONTRACT_ADDRESS = "0x6a996DA8761C164B5ACE18AE11024b8dc6DD2f1f"; 
-const CHAIN_ID = 137; // Polygon Mainnet ID
+// ⚠️ V10.3 PRODUCTION: 已填入部署後的合約地址
+const CONTRACT_ADDRESS = "0x01b1e5424C982d8209679DA404ff3247ed9687B5"; 
+const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
-// --- ABI (Updated for V9) ---
+// --- ABI (Updated for V10.3 Production) ---
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
   "function pendingWinnings(address) view returns (uint256)",
   "function claimPrize() external",
-  "function performUpkeep(string calldata source) external",
-  "event TicketPurchased(address indexed player, bytes choices, uint256 timestamp)",
-  "function emergencyWithdraw() external" 
+  "function pickWinner() external",
+  // Admin Functions
+  "function emergencyWithdraw() external",
+  "function setMarketStatus(bool _isOpen) external",
+  "function isMarketOpen() view returns (bool)",
+  // Events
+  "event TicketPurchased(address indexed player)", 
+  "event WinnerPicked(address indexed winner, uint256 prize, uint256 fee, uint256 randomValue)"
 ];
-
-// --- CHAINLINK SOURCE (JS executed by Decentralized Oracle Network) ---
-// ⚠️ V9.8 修正：抗審查節點列表 (Anti-Censorship RPC List)
-// 之前的錯誤是因為公共節點封鎖了 Chainlink 的 IP。
-// 這次我們使用 DRPC, BlastAPI 等專門支援高流量的節點。
-const CHAINLINK_SOURCE = `
-const contractAddress = "${CONTRACT_ADDRESS}"; 
-
-// V9.8 新增：強力節點列表 (優先順序已調整)
-const rpcList = [
-    "https://polygon.drpc.org",                 // 推薦：DRPC 通常不擋 Chainlink
-    "https://polygon-mainnet.public.blastapi.io", // 推薦：BlastAPI 速度快
-    "https://polygon.blockpi.network/v1/rpc/public", // BlockPI
-    "https://1rpc.io/matic",                    // 隱私節點
-    "https://rpc.ankr.com/polygon",             // Ankr (備用)
-    "https://polygon-bor-rpc.publicnode.com"    // PublicNode (備用)
-];
-
-const data = "0x5d62d910"; // getPlayerCount() selector
-
-console.log("Target:", contractAddress);
-
-async function tryRpc(url) {
-    try {
-        console.log("Connecting to: " + url);
-        const request = Functions.makeHttpRequest({
-            url: url,
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            data: {
-                jsonrpc: "2.0",
-                method: "eth_call",
-                params: [{ to: contractAddress, data: data }, "latest"],
-                id: 1
-            },
-            timeout: 5000
-        });
-        
-        const response = await request;
-        
-        if (response.error) {
-            console.log("Connect Error: " + url);
-            return null;
-        }
-        
-        if (!response.data || !response.data.result) {
-            console.log("No Result: " + url);
-            return null;
-        }
-        
-        const res = response.data.result;
-
-        // 如果節點回傳 "0x"，表示它連上了但讀不到數據
-        if (res === "0x") {
-            console.log("Empty Response (0x): " + url);
-            return null;
-        }
-        
-        return res;
-    } catch (e) {
-        console.log("Exception: " + e.message);
-        return null;
-    }
-}
-
-// 主邏輯：輪詢
-let hexCount = null;
-
-for (let i = 0; i < rpcList.length; i++) {
-    hexCount = await tryRpc(rpcList[i]);
-    if (hexCount) break; 
-}
-
-if (!hexCount) {
-    // 如果還是失敗，請檢查合約是否真的部署在 Polygon Mainnet
-    throw Error("ALL NODES FAILED. Check if contract exists on PolygonScan: " + contractAddress);
-}
-
-const count = parseInt(hexCount, 16);
-console.log("Count:", count);
-
-if (isNaN(count)) throw Error("NaN Result");
-
-if (count === 0) return Functions.encodeUint256(BigInt(0));
-
-const seed = count * 997 + 123;
-const winnerIndex = seed % count;
-
-return Functions.encodeUint256(BigInt(winnerIndex));
-`;
 
 // --- STATE ---
 let provider, signer, contract;
@@ -179,8 +93,9 @@ async function connectWallet() {
         if (CONTRACT_ADDRESS && CONTRACT_ADDRESS.length > 10) {
             contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
             refreshData();
+            setupEvents();
         } else {
-            console.warn("Contract Address NOT SET in script.js");
+            console.warn("⚠️ PLEASE DEPLOY V10.3 CONTRACT AND UPDATE SCRIPT.JS");
         }
 
         // Update UI
@@ -194,6 +109,16 @@ async function connectWallet() {
     } catch (e) {
         console.error("Wallet connection failed", e);
     }
+}
+
+function setupEvents() {
+    if (!contract) return;
+    // Listen for WinnerPicked to refresh UI automatically
+    contract.on("WinnerPicked", (winner, prize, fee) => {
+        console.log(`Winner picked: ${winner}`);
+        alert(`🎉 Winner Picked! \nWinner: ${winner.slice(0,6)}... \nPrize: ${ethers.formatEther(prize)} POL`);
+        refreshData();
+    });
 }
 
 async function refreshData() {
@@ -234,9 +159,12 @@ async function refreshData() {
 
 // --- ACTIONS ---
 buyBtn.onclick = async () => {
-    if (!contract) return alert("Contract address not set in script.js");
+    if (!contract) return alert("Contract address missing in script.js");
     setLoading(true, "MINTING TICKET...");
     try {
+        const isOpen = await contract.isMarketOpen();
+        if(!isOpen) throw new Error("Market is currently closed by Admin.");
+
         const coords = currentSelection.map(num => {
             const row = String.fromCharCode(65 + Math.floor((num - 1) / 7));
             const col = ((num - 1) % 7) + 1;
@@ -258,15 +186,14 @@ buyBtn.onclick = async () => {
 };
 
 document.getElementById('draw-btn').onclick = async () => {
-    if (!contract) return alert("Contract address not set in script.js");
-    setLoading(true, "REQUESTING RANDOMNESS (V9.8 ANTI-CENSOR)...");
+    if (!contract) return alert("Contract address missing in script.js");
+    setLoading(true, "REQUESTING VRF RANDOMNESS...");
     try {
-        // V9.8: 使用新節點列表
-        const tx = await contract.performUpkeep(CHAINLINK_SOURCE);
+        const tx = await contract.pickWinner();
         await tx.wait();
-        alert("Draw Initiated! Using Anti-Censorship Nodes (Wait ~1 min)...");
+        alert("Randomness Requested! Wait ~30s for Chainlink VRF V2.5 callback.");
     } catch (e) {
-        alert("Draw Failed: " + (e.reason || "Check console"));
+        alert("Draw Failed: " + (e.reason || "Check console (Only Owner can draw)"));
     }
     setLoading(false);
 };
