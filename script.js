@@ -1,22 +1,22 @@
 import { ethers } from "ethers";
 
 // --- CONFIGURATION ---
-// ⚠️ 部署 AuterArkV12_Final.txt 後，請貼上新地址
-const CONTRACT_ADDRESS = "0xE1116629228F9f338b903dd94784BA17aD2193A3"; 
+// ⚠️ 部署 AuterArkV14_Diagnostic.txt 後，請貼上新地址
+const CONTRACT_ADDRESS = "0xBb6a4aacD760F9B5aC7871A5897aB30cF7149d65"; 
 const CHAIN_ID = 137; // Polygon Mainnet
 const TICKET_PRICE = ethers.parseEther("1.0");
 
-// --- ABI ---
+// --- ABI (V14 Diagnostic) ---
 const ABI = [
   "function buyTicket(bytes calldata _encryptedChoices) external payable",
   "function getPlayerCount() view returns (uint256)",
   "function pendingWinnings(address) view returns (uint256)",
   "function claimPrize() external",
   "function pickWinner() external",
+  // V14 New Diagnostic Function
+  "function getFullDebugInfo() view returns (address, address, uint256, bytes32, uint256, uint256, address)",
   // Admin & Debug Functions
   "function emergencyWithdraw() external",
-  "function setMarketStatus(bool _isOpen) external",
-  "function isMarketOpen() view returns (bool)",
   // Events
   "event TicketPurchased(address indexed player)", 
   "event WinnerPicked(address indexed winner, uint256 prize, uint256 fee, uint256 randomValue)"
@@ -36,8 +36,16 @@ const selectionCount = document.getElementById('selection-count');
 const buyBtn = document.getElementById('buy-btn');
 const clearBtn = document.getElementById('clear-btn');
 const drawBtn = document.getElementById('draw-btn');
+const checkBtn = document.getElementById('check-btn');
 const loadingOverlay = document.getElementById('loading-overlay');
 const loadingText = document.getElementById('loading-text');
+
+// Modal Elements
+const debugModal = document.getElementById('debug-modal');
+const debugContent = document.getElementById('debug-content');
+const closeDebug = document.getElementById('close-debug');
+const linkChainlink = document.getElementById('link-chainlink');
+const linkPolygonscan = document.getElementById('link-polygonscan');
 
 // --- INITIALIZATION ---
 function initGrid() {
@@ -159,9 +167,6 @@ buyBtn.onclick = async () => {
     if (!contract || CONTRACT_ADDRESS.length < 10) return alert("Contract address missing! Please update script.js");
     setLoading(true, "MINTING TICKET...");
     try {
-        const isOpen = await contract.isMarketOpen();
-        if(!isOpen) throw new Error("Market is currently closed by Admin.");
-
         const coords = currentSelection.map(num => {
             const row = String.fromCharCode(65 + Math.floor((num - 1) / 7));
             const col = ((num - 1) % 7) + 1;
@@ -182,33 +187,104 @@ buyBtn.onclick = async () => {
     setLoading(false);
 };
 
+// --- DEBUG DIAGNOSTIC LOGIC ---
+checkBtn.onclick = async () => {
+    if (!contract) return alert("Connect Wallet first");
+    debugModal.classList.remove('hidden');
+    debugContent.innerHTML = `<p class="text-center animate-pulse text-cyan-400">CONNECTING TO CONTRACT MEMORY...</p>`;
+
+    try {
+        // Fetch raw data from contract V14
+        const [
+            coordinatorAddr,
+            contractAddr,
+            subId,
+            keyHash,
+            balance,
+            playerCount,
+            ownerAddr
+        ] = await contract.getFullDebugInfo();
+
+        const detectedSubId = subId.toString();
+        const detectedBalance = ethers.formatEther(balance);
+        
+        // Update Links
+        linkChainlink.href = `https://vrf.chain.link/polygon/${detectedSubId}`;
+        linkPolygonscan.href = `https://polygonscan.com/address/${CONTRACT_ADDRESS}`;
+
+        let html = `
+            <div class="grid grid-cols-1 gap-3">
+                <div class="bg-slate-800 p-3 rounded border border-slate-700">
+                    <p class="text-xs text-slate-500">Contract Address</p>
+                    <p class="text-white break-all">${CONTRACT_ADDRESS}</p>
+                </div>
+                
+                <div class="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center">
+                    <div>
+                        <p class="text-xs text-slate-500">Subscription ID (Inside Contract)</p>
+                        <p class="text-xl font-bold text-yellow-400">${detectedSubId}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs text-slate-500">Contract Balance</p>
+                        <p class="text-xl font-bold ${Number(detectedBalance) >= 1 ? 'text-green-400' : 'text-red-500'}">${detectedBalance} POL</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-800 p-3 rounded border border-slate-700">
+                     <p class="text-xs text-slate-500">Player Count</p>
+                     <p class="text-white">${playerCount} (Must be > 0 to Draw)</p>
+                </div>
+
+                <div class="bg-slate-800 p-3 rounded border border-slate-700">
+                     <p class="text-xs text-slate-500">VRF Coordinator (Polygon)</p>
+                     <p class="text-xs text-slate-400 break-all">${coordinatorAddr}</p>
+                     <p class="text-[10px] text-green-500 mt-1">${coordinatorAddr === '0x3C0Ca683b403E37668AE3DC4FB62F4B29B6f7a3e' ? '✅ MATCHES MAINNET' : '❌ WRONG ADDRESS'}</p>
+                </div>
+                
+                <div class="bg-slate-800 p-3 rounded border border-slate-700">
+                     <p class="text-xs text-slate-500">Key Hash (Gas Lane)</p>
+                     <p class="text-xs text-slate-400 break-all">${keyHash}</p>
+                     <p class="text-[10px] text-green-500 mt-1">${keyHash === '0x719e78216d7a488f7808298782a22235948f95c010b490f05560b457b0784d86' ? '✅ 1000 GWEI (High Priority)' : '⚠️ CUSTOM SETTING'}</p>
+                </div>
+            </div>
+        `;
+        
+        debugContent.innerHTML = html;
+
+    } catch (e) {
+        debugContent.innerHTML = `<p class="text-red-500">Error reading contract: ${e.message}</p>`;
+    }
+};
+
+closeDebug.onclick = () => {
+    debugModal.classList.add('hidden');
+};
+
+
 drawBtn.onclick = async () => {
     if (!contract || CONTRACT_ADDRESS.length < 10) return alert("Contract address missing! Please update script.js");
     
-    // 1. Check players LOCALLY first to avoid gas waste
+    // 1. Check players LOCALLY
     try {
         const players = await contract.getPlayerCount();
         if (Number(players) === 0) {
-            alert("⚠️ 錯誤：目前沒有玩家！\n\n您必須先「購買一張彩票」才能執行開獎。\n請選擇 6 個號碼並點擊 MINT TICKET。");
+            alert("⚠️ ERROR: No players! \n\nPlease BUY A TICKET first before drawing.");
             return;
         }
-    } catch(e) {
-        console.warn("Could not fetch player count", e);
-    }
+    } catch(e) {}
 
     setLoading(true, "REQUESTING VRF...");
     try {
+        // Execute Draw
         const tx = await contract.pickWinner({ gasLimit: 500000 });
         await tx.wait();
-        alert("✅ Randomness Requested! \nWait ~30-60s. The winner will appear automatically.");
+        alert("✅ Randomness Requested! \nWait ~60s. The winner will appear automatically.");
     } catch (e) {
         console.error("Draw Error:", e);
         let errorMsg = e.reason || e.message || "Unknown Error";
         
-        if (errorMsg.includes("No players")) {
-             errorMsg = "❌ No players in pool! Buy a ticket first.";
-        } else if (errorMsg.includes("execution reverted")) {
-            errorMsg = "❌ Transaction Reverted!\n\nFINAL CHECKLIST:\n1. Open vrf.chain.link (Polygon Mainnet).\n2. Is your Subscription funded with **POL**? (At least 3 POL)\n3. Did you 'Add Consumer' and paste the NEW Contract Address?\n4. Did you Buy a Ticket first?";
+        if (errorMsg.includes("execution reverted")) {
+            errorMsg = "❌ Transaction Reverted!\n\nPlease open the [DIAGNOSTIC PANEL] to verify your Subscription ID and Balance.";
         }
         alert(errorMsg);
     }
